@@ -58,7 +58,6 @@ export const initializeChat = () => {
 
   if (!apiKey) {
     console.warn("API_KEY is missing. Chat will operate in fallback mode or fail.");
-    // We don't return here so the app can still render, just the API calls will fail gracefully
   } else {
     genAI = new GoogleGenAI({ apiKey: apiKey });
     
@@ -66,30 +65,65 @@ export const initializeChat = () => {
       model: 'gemini-2.5-flash',
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.7, // Balance between creative and focused
+        temperature: 0.7,
       }
     });
   }
 };
 
-export const sendMessageToGemini = async (message: string): Promise<string> => {
+// Helper to wait
+const delayPromise = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const sendMessageToGemini = async (message: string, onStatusUpdate?: (status: string) => void): Promise<string> => {
   if (!chatSession) {
     initializeChat();
   }
 
   if (!chatSession) {
-     // If still no session (e.g., no API Key), throw a specific error
      throw new Error("Chat session not initialized (Check API Key)");
   }
 
-  try {
-    const result = await chatSession.sendMessage({
-      message: message
-    });
-    return result.text;
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    // Allow the caller (UI) to handle specific errors like 429
-    throw error;
+  const MAX_RETRIES = 3;
+  let attempt = 0;
+
+  while (attempt <= MAX_RETRIES) {
+    try {
+      const result = await chatSession.sendMessage({
+        message: message
+      });
+      return result.text;
+    } catch (error: any) {
+      const errStr = error.toString();
+      const errMsg = error.message || errStr;
+      
+      // Check for 429 (Quota Exceeded)
+      if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429")) {
+        attempt++;
+        if (attempt > MAX_RETRIES) throw error; // Give up after max retries
+
+        // Extract wait time from error message, default to 30s if not found
+        const match = errMsg.match(/retry in (\d+(\.\d+)?)s/);
+        const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 30;
+        const safeWait = waitSeconds + 1; // Add 1s buffer
+
+        const statusMsg = `⏳ High traffic. Waiting ${safeWait}s for next slot...`;
+        console.warn(statusMsg);
+        
+        if (onStatusUpdate) {
+            onStatusUpdate(statusMsg);
+        }
+
+        // Wait before retrying
+        await delayPromise(safeWait * 1000);
+        
+        if (onStatusUpdate) onStatusUpdate("Retrying now...");
+        continue; // Retry loop
+      }
+
+      console.error("Gemini API Error:", error);
+      throw error; // Throw other errors immediately
+    }
   }
+  
+  throw new Error("Request failed after retries.");
 };

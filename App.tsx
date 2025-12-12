@@ -9,6 +9,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [typingStatus, setTypingStatus] = useState<string>(''); // New state for detailed status
   const [hasStarted, setHasStarted] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   
@@ -25,7 +26,7 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping]);
+  }, [messages, isTyping, typingStatus]);
 
   useEffect(() => {
     // Initialize Gemini when app loads
@@ -173,33 +174,37 @@ function App() {
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
     setIsTyping(true);
+    setTypingStatus(''); // Clear status
 
     try {
-      const response = await sendMessageToGemini(inputText);
+      // Pass the callback to update status text during long waits
+      const response = await sendMessageToGemini(inputText, (status) => {
+        setTypingStatus(status);
+      });
+      
       setIsTyping(false);
+      setTypingStatus('');
       addBotMessage(response);
     } catch (error: any) {
       setIsTyping(false);
-      let errorMessage = "Connection error. Please try again.";
+      setTypingStatus('');
       
+      let errorMessage = "Connection error. Please try again.";
       const errorStr = error.toString();
-      const errorMsg = error.message || errorStr;
-
-      if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
-          const waitTimeMatch = errorMsg.match(/retry in (\d+(\.\d+)?)s/);
-          const waitTime = waitTimeMatch ? Math.ceil(parseFloat(waitTimeMatch[1])) : 30;
-          errorMessage = `⚠️ High Traffic Warning: Our AI consultant is currently experiencing high demand. Please wait ${waitTime} seconds before sending your next message.`;
+      
+      // Fallback error parsing if retries also failed
+      if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
+         errorMessage = "⚠️ High Traffic: Maximum retries exceeded. Please try again in 1 minute.";
       } else {
-           // Try to extract a clean message if it's a JSON string
-           try {
-              const match = errorMsg.match(/{.*}/);
-              if (match) {
-                  const errObj = JSON.parse(match[0]);
-                  if (errObj.error && errObj.error.message) {
-                      errorMessage = `Error: ${errObj.error.message}`;
-                  }
-              }
-           } catch(e) {}
+         try {
+            const match = errorStr.match(/{.*}/);
+            if (match) {
+                const errObj = JSON.parse(match[0]);
+                if (errObj.error && errObj.error.message) {
+                    errorMessage = `Error: ${errObj.error.message}`;
+                }
+            }
+         } catch(e) {}
       }
 
       setMessages(prev => [...prev, {
@@ -264,13 +269,18 @@ function App() {
             <ChatMessage key={msg.id} message={msg} />
           ))}
 
-          {/* Typing Indicator */}
+          {/* Typing Indicator & Status */}
           {isTyping && (
-            <div className="flex w-full mb-3 justify-start">
-               <div className="bg-white px-4 py-3 rounded-lg rounded-tl-none shadow-sm flex gap-1 items-center">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+            <div className="flex w-full mb-3 justify-start animate-fade-in">
+               <div className="flex flex-col gap-1">
+                 <div className="bg-white px-4 py-3 rounded-lg rounded-tl-none shadow-sm flex gap-1 items-center w-fit">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                 </div>
+                 {typingStatus && (
+                     <span className="text-[10px] text-gray-500 font-medium ml-1 bg-white/50 px-2 py-1 rounded w-fit">{typingStatus}</span>
+                 )}
                </div>
             </div>
           )}
