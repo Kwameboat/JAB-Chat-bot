@@ -14,6 +14,9 @@ function App() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Check for key availability immediately
+  const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === '__GENAI_API_KEY__';
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -28,6 +31,11 @@ function App() {
     // Initialize Gemini when app loads
     initializeChat();
     
+    // Auto-open modal if key is missing so user knows what to do
+    if (isApiKeyMissing) {
+        setIsConnectModalOpen(true);
+    }
+
     // Initial welcome message trigger (simulate slight delay for realism)
     const timer = setTimeout(() => {
         handleInitialWelcome();
@@ -172,10 +180,11 @@ function App() {
              {/* Connect Button */}
              <button 
                onClick={() => setIsConnectModalOpen(true)}
-               className="hover:bg-white/10 p-1.5 rounded-full transition-colors flex items-center gap-1"
+               className={`hover:bg-white/10 p-1.5 rounded-full transition-colors flex items-center gap-1 ${isApiKeyMissing ? 'bg-white/20 animate-pulse text-yellow-300' : ''}`}
                title="Connect to AuthKey"
              >
                 <Link2 size={20} />
+                {isApiKeyMissing && <span className="text-[10px] font-bold">SETUP</span>}
              </button>
             <Video size={20} className="cursor-pointer hover:text-white hidden sm:block" />
             <Phone size={20} className="cursor-pointer hover:text-white hidden sm:block" />
