@@ -51,14 +51,22 @@ Our company email is: jabconcept3@gmail.com
 
 let chatSession: Chat | null = null;
 let genAI: GoogleGenAI | null = null;
+let currentModelName = '';
 
-export const initializeChat = () => {
+export const initializeChat = (forceLite = false) => {
   // Safely check for process.env availability
   const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
 
-  // Check for User preference for Lite model (fixes high traffic)
-  const useLite = typeof localStorage !== 'undefined' && localStorage.getItem('gemini_use_lite') === 'true';
+  // LOGIC CHANGE: Default to Lite model unless explicitly set to 'false' in localStorage.
+  // This prevents High Traffic errors for new users by default.
+  const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('gemini_use_lite') : null;
+  
+  let useLite = true; // Default to true for stability
+  if (storedPref === 'false') useLite = false;
+  if (forceLite) useLite = true;
+
   const modelName = useLite ? 'gemini-flash-lite-latest' : 'gemini-2.5-flash';
+  currentModelName = modelName;
 
   if (!apiKey) {
     console.warn("API_KEY is missing. Chat will operate in fallback mode or fail.");
@@ -101,17 +109,37 @@ export const sendMessageToGemini = async (message: string, onStatusUpdate?: (sta
       const errStr = error.toString();
       const errMsg = error.message || errStr;
       
-      // Check for 429 (Quota Exceeded)
-      if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429")) {
+      // Check for 429 (Quota Exceeded) or 503 (Overloaded)
+      if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429") || errStr.includes("503")) {
+        
+        // AUTO-FALLBACK: If we hit a limit on Standard, switch to Lite immediately
+        if (currentModelName !== 'gemini-flash-lite-latest') {
+            const fallbackMsg = "⚠️ High traffic on Standard model. Switching to Lite model...";
+            console.warn(fallbackMsg);
+            if (onStatusUpdate) onStatusUpdate(fallbackMsg);
+            
+            // Re-initialize with Lite forced
+            initializeChat(true);
+            
+            // Save this preference so next time it starts with Lite
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('gemini_use_lite', 'true');
+            }
+
+            attempt = 0; // Reset attempts for the new model
+            await delayPromise(1000); // Small pause
+            continue; // Retry immediately with new model
+        }
+
         attempt++;
         if (attempt > MAX_RETRIES) throw error; // Give up after max retries
 
-        // Extract wait time from error message, default to 30s if not found
+        // Extract wait time from error message, default to 5s if not found
         const match = errMsg.match(/retry in (\d+(\.\d+)?)s/);
-        const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 30;
+        const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 5;
         const safeWait = waitSeconds + 1; // Add 1s buffer
 
-        const statusMsg = `⏳ High traffic. Waiting ${safeWait}s for next slot...`;
+        const statusMsg = `⏳ High traffic. Waiting ${safeWait}s...`;
         console.warn(statusMsg);
         
         if (onStatusUpdate) {
@@ -121,7 +149,7 @@ export const sendMessageToGemini = async (message: string, onStatusUpdate?: (sta
         // Wait before retrying
         await delayPromise(safeWait * 1000);
         
-        if (onStatusUpdate) onStatusUpdate("Retrying now...");
+        if (onStatusUpdate) onStatusUpdate("Retrying...");
         continue; // Retry loop
       }
 

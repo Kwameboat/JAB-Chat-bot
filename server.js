@@ -161,7 +161,7 @@ app.post('/webhook', async (req, res) => {
     }
 
     const chat = aiClient.chats.create({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-flash-lite-latest', // Use Lite model for webhook stability
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.7,

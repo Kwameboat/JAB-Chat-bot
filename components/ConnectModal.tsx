@@ -9,7 +9,12 @@ interface ConnectModalProps {
 
 export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) => {
   const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [useLite, setUseLite] = useState(localStorage.getItem('gemini_use_lite') === 'true');
+  
+  // LOGIC UPDATE: Default to TRUE if not set. 'false' string means explicitly disabled.
+  const storedLitePref = localStorage.getItem('gemini_use_lite');
+  const initialLiteState = storedLitePref === 'false' ? false : true; 
+  
+  const [useLite, setUseLite] = useState(initialLiteState);
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSave = () => {
@@ -106,11 +111,10 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                     <label htmlFor="liteModel" className="cursor-pointer select-none">
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
                             <Gauge size={16} className="text-purple-600"/> 
-                            Use 'Lite' Model (Fixes High Traffic)
+                            Use 'Lite' Model (Recommended)
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            Enable this if you are getting "429 Resource Exhausted" or "High Traffic" errors. 
-                            It uses <code>gemini-flash-lite</code> which is faster and has higher limits.
+                            Highly recommended for Free Tier. Switches to <code>gemini-flash-lite</code> which is faster and prevents "High Traffic" errors.
                         </p>
                     </label>
                 </div>
