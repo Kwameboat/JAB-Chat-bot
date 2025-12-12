@@ -136,11 +136,17 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                     <Mail size={16} /> 2. Email Configuration
                 </strong>
                 <p className="text-xs text-green-700 mb-2">
-                    To receive actual emails, set these in your Render Environment:
+                    To send real emails, you must set these <strong>Environment Variables</strong> in Render:
                 </p>
-                <ul className="text-xs text-green-700 list-disc list-inside space-y-1">
+                <ul className="text-xs text-green-700 list-disc list-inside space-y-2">
                     <li><strong>SMTP_USER:</strong> <code>jabconcept3@gmail.com</code></li>
-                    <li><strong>SMTP_PASS:</strong> Your Gmail App Password</li>
+                    <li><strong>SMTP_PASS:</strong> 
+                        <span className="bg-green-100 px-1 rounded border border-green-300">Requires App Password!</span>
+                        <br/>
+                        <span className="text-[10px] ml-4">
+                           (Go to Google Account → Security → 2-Step Verification → App Passwords)
+                        </span>
+                    </li>
                 </ul>
             </div>
 

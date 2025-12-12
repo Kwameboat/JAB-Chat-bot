@@ -27,15 +27,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         statusText = 'Email Failed ✕';
     } else if (message.emailStatus === 'simulated') {
         statusColor = 'text-orange-600';
-        statusText = '⚠ Simulation (Configure SMTP)';
+        statusText = '⚠ Simulation Only';
     }
+
+    // Fallback Mailto Link logic for manual sending
+    const subjectMatch = message.text.match(/Subject: (.*)/);
+    const subject = subjectMatch ? subjectMatch[1] : "New Appointment";
+    const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message.text)}`;
 
     return (
       <div className="flex justify-center my-4 animate-fade-in px-4 w-full">
         <div className="bg-white rounded-lg shadow-md border border-gray-200 w-full max-w-sm overflow-hidden">
           <div className="bg-teal-600 text-white p-3 flex items-center gap-2">
             <Mail size={18} />
-            <span className="font-medium text-sm">System Email Sent</span>
+            <span className="font-medium text-sm">System Email</span>
           </div>
           <div className="p-4 text-xs font-mono text-gray-700 whitespace-pre-wrap bg-gray-50">
             {message.text}
@@ -43,6 +48,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           <div className={`bg-gray-100 p-2 text-center text-xs font-semibold border-t border-gray-200 ${statusColor}`}>
              {statusText}
           </div>
+          
+          {/* Manual Send Button if Automated fails or is simulated */}
+          {(message.emailStatus !== 'sent') && (
+            <a 
+                href={mailtoLink}
+                target="_blank"
+                rel="noreferrer"
+                className="block bg-blue-600 hover:bg-blue-700 text-white text-center py-2 text-sm font-bold transition-colors"
+            >
+                Tap to Send Email Manually
+            </a>
+          )}
         </div>
       </div>
     );
