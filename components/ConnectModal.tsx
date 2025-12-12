@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Server, Check, Key } from 'lucide-react';
+import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save } from 'lucide-react';
 import { SYSTEM_INSTRUCTION } from '../services/geminiService';
 
 interface ConnectModalProps {
@@ -8,7 +8,21 @@ interface ConnectModalProps {
 }
 
 export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) => {
-  const [copied, setCopied] = useState(false);
+  const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const handleSave = () => {
+    if (manualKey.trim()) {
+        localStorage.setItem('gemini_api_key', manualKey.trim());
+    } else {
+        localStorage.removeItem('gemini_api_key');
+    }
+    setShowSuccess(true);
+    setTimeout(() => {
+        setShowSuccess(false);
+        window.location.reload(); // Reload to pick up new key
+    }, 1000);
+  };
 
   if (!isOpen) return null;
 
@@ -20,7 +34,7 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
         <div className="bg-[#075E54] p-4 flex justify-between items-center text-white shrink-0">
           <div className="flex items-center gap-2">
             <Server size={20} />
-            <h2 className="text-lg font-semibold">Connect to AuthKey & WhatsApp</h2>
+            <h2 className="text-lg font-semibold">Connect & Setup</h2>
           </div>
           <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full transition">
             <X size={20} />
@@ -29,47 +43,61 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
 
         {/* Content */}
         <div className="p-6 overflow-y-auto">
-          <p className="text-gray-600 mb-6 text-sm">
-            The backend logic handles real WhatsApp webhooks.
-          </p>
           
-          <div className="space-y-4">
+          <div className="space-y-6">
           
             {/* Step 1: API Key */}
             <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
                 <strong className="text-blue-800 text-sm flex items-center gap-2 mb-2">
-                    <Key size={16} /> 1. Get Gemini API Key
+                    <Key size={16} /> 1. AI API Key (Gemini)
                 </strong>
-                <p className="text-sm text-blue-700 mb-2">
-                   You need a Google Gemini API Key for the chatbot to work.
+                <p className="text-xs text-blue-700 mb-3">
+                   Paste your API Key here to enable the Chatbot.
                 </p>
-                <a 
-                    href="https://aistudio.google.com/app/apikey" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-block bg-blue-600 text-white text-xs px-3 py-2 rounded hover:bg-blue-700 transition"
-                >
-                    Generate Key at Google AI Studio
-                </a>
-                <div className="mt-2 text-xs text-blue-800">
-                    Then add it to Render: <strong>Environment</strong> -> <strong>Add Environment Variable</strong> -> Key: <code>API_KEY</code>
+                
+                <div className="flex gap-2">
+                    <input 
+                        type="password" 
+                        value={manualKey}
+                        onChange={(e) => setManualKey(e.target.value)}
+                        placeholder="Paste your AIza... key here"
+                        className="flex-1 px-3 py-2 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button 
+                        onClick={handleSave}
+                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition flex items-center gap-1"
+                    >
+                        {showSuccess ? <CheckCheck size={16}/> : <Save size={16}/>}
+                        {showSuccess ? "Saved!" : "Save"}
+                    </button>
+                </div>
+                <div className="mt-2 text-[10px] text-blue-600">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Get a key here</a>.
                 </div>
             </div>
 
-            {/* Step 2: Webhook */}
-            <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200">
-                <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
-                    <Server size={16} /> 2. Webhook Configuration
+            {/* Step 2: Email Setup Info */}
+            <div className="bg-green-50 p-4 rounded-md border border-green-200">
+                <strong className="text-green-800 text-sm flex items-center gap-2 mb-1">
+                    <Mail size={16} /> 2. Email Configuration
                 </strong>
-                <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
-                    <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
-                    <li><strong>Method:</strong> <code>POST</code></li>
-                    <li><strong>Format:</strong> <code>JSON</code></li>
+                <p className="text-xs text-green-700 mb-2">
+                    To receive actual emails, set these in your Render Environment:
+                </p>
+                <ul className="text-xs text-green-700 list-disc list-inside space-y-1">
+                    <li><strong>SMTP_USER:</strong> <code>jabconcept3@gmail.com</code></li>
+                    <li><strong>SMTP_PASS:</strong> Your Gmail App Password</li>
                 </ul>
             </div>
 
-            <div className="bg-gray-100 p-4 rounded text-sm text-gray-700">
-                Please refer to <strong>server.js</strong> for the full backend implementation used for deployment.
+            {/* Step 3: Webhook Info */}
+            <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200 opacity-80">
+                <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
+                    <Server size={16} /> 3. WhatsApp Webhook
+                </strong>
+                <ul className="text-xs text-yellow-700 list-disc list-inside space-y-1">
+                    <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
+                </ul>
             </div>
           </div>
         </div>

@@ -26,7 +26,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             {message.text}
           </div>
           <div className="bg-gray-100 p-2 text-center text-xs text-green-600 font-semibold border-t border-gray-200">
-             Sent to boatengkwm@yahoo.com ✓
+             Sent to jabconcept3@gmail.com ✓
           </div>
         </div>
       </div>

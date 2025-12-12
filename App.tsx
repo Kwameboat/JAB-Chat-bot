@@ -58,6 +58,34 @@ function App() {
       }
   };
 
+  const triggerEmail = async (emailContent: string, msgId: string) => {
+    try {
+        // Extract Subject
+        const subjectMatch = emailContent.match(/Subject: (.*)/);
+        const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
+
+        await fetch('/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: 'jabconcept3@gmail.com',
+                subject: subject,
+                text: emailContent
+            })
+        });
+        
+        // Update UI to show success in the message object (needs type extension if strictly typed, forcing here for demo)
+        setMessages(prev => prev.map(m => 
+            m.id === msgId ? { ...m, emailStatus: 'sent' } : m
+        ));
+    } catch (e) {
+        console.error("Email trigger failed:", e);
+        setMessages(prev => prev.map(m => 
+            m.id === msgId ? { ...m, emailStatus: 'failed' } : m
+        ));
+    }
+  };
+
   const addBotMessage = (rawText: string) => {
     // Check for email summary tags
     const emailStartTag = "EMAIL_SUMMARY_START";
@@ -84,13 +112,17 @@ function App() {
         }
 
         // Add Email Card
+        const emailMsgId = Date.now().toString() + '-email';
         processedMessages.push({
-            id: Date.now().toString() + '-email',
+            id: emailMsgId,
             text: emailContent,
             sender: Sender.BOT,
             timestamp: new Date(),
             isEmailSummary: true
         });
+
+        // Trigger real email
+        triggerEmail(emailContent, emailMsgId);
 
         // Add post-text if exists
         if (postText) {

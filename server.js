@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import nodemailer from 'nodemailer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,12 +19,28 @@ app.use(express.static(__dirname));
 
 // Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY;
-const COMPANY_EMAIL = 'boatengkwm@yahoo.com';
+const COMPANY_EMAIL = 'jabconcept3@gmail.com';
+
+// Email Configuration (SMTP)
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+// Defaults to Gmail service, but can be configured for others if needed
+const EMAIL_TRANSPORTER = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS
+  }
+});
 
 if (!GEMINI_API_KEY) {
     console.warn("⚠️  [Server] WARNING: API_KEY is missing in the environment variables!");
 } else {
     console.log(`✅ [Server] API Key found (Length: ${GEMINI_API_KEY.length})`);
+}
+
+if (!SMTP_USER || !SMTP_PASS) {
+    console.warn("⚠️  [Server] WARNING: SMTP_USER or SMTP_PASS missing. Emails will only be logged to console, not sent.");
 }
 
 // System Instruction
@@ -76,7 +93,32 @@ if (GEMINI_API_KEY) {
   aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 }
 
-// --- FRONTEND ROUTE ---
+// --- EMAIL SENDING HELPER ---
+async function sendEmail(to, subject, text) {
+    console.log(`📧 [Email Request] To: ${to}, Subject: ${subject}`);
+    
+    if (!SMTP_USER || !SMTP_PASS) {
+        console.log(`📝 [Email Simulation] Content:\n${text}\n(Configure SMTP_USER & SMTP_PASS to send real emails)`);
+        return { success: true, simulated: true };
+    }
+
+    try {
+        const info = await EMAIL_TRANSPORTER.sendMail({
+            from: `"Digital Hub Bot" <${SMTP_USER}>`,
+            to: to,
+            subject: subject,
+            text: text
+        });
+        console.log("✅ [Email Sent] Message ID:", info.messageId);
+        return { success: true, id: info.messageId };
+    } catch (error) {
+        console.error("❌ [Email Failed]", error);
+        throw error;
+    }
+}
+
+// --- ROUTES ---
+
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
     fs.readFile(indexPath, 'utf8', (err, data) => {
@@ -84,20 +126,24 @@ app.get('/', (req, res) => {
             console.error("Error reading index.html:", err);
             return res.status(500).send('Error loading frontend');
         }
-        
         const keyToInject = GEMINI_API_KEY || '';
-        
-        console.log(`[Request] Serving index.html. Injecting Key: ${keyToInject ? 'Yes' : 'No'}`);
-
-        const injectedHtml = data.replace(
-            '__GENAI_API_KEY__', 
-            keyToInject
-        );
+        const injectedHtml = data.replace('__GENAI_API_KEY__', keyToInject);
         res.send(injectedHtml);
     });
 });
 
-// --- BACKEND WEBHOOK (For Real WhatsApp Integration) ---
+// Endpoint for Frontend to trigger email
+app.post('/send-email', async (req, res) => {
+    const { to, subject, text } = req.body;
+    try {
+        const result = await sendEmail(to || COMPANY_EMAIL, subject || "New Digital Hub Appointment", text);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Backend Webhook for WhatsApp
 app.post('/webhook', async (req, res) => {
   try {
     console.log('Incoming Webhook Body:', JSON.stringify(req.body, null, 2));
@@ -126,6 +172,20 @@ app.post('/webhook', async (req, res) => {
     const botResponse = result.text;
     
     console.log("🤖 AI Response Generated:", botResponse);
+
+    // Check if response contains email summary and trigger email from backend automatically
+    if (botResponse.includes('EMAIL_SUMMARY_START') && botResponse.includes('EMAIL_SUMMARY_END')) {
+        const parts = botResponse.split('EMAIL_SUMMARY_START');
+        const rest = parts[1].split('EMAIL_SUMMARY_END');
+        const emailContent = rest[0].trim();
+        
+        // Extract Subject line if possible
+        const subjectMatch = emailContent.match(/Subject: (.*)/);
+        const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
+
+        // Send email (fire and forget)
+        sendEmail(COMPANY_EMAIL, subject, emailContent).catch(e => console.error("Webhook email trigger failed:", e));
+    }
 
     res.status(200).json({ reply: botResponse });
 

@@ -46,7 +46,8 @@
     "express": "https://esm.sh/express@^5.2.1",
     "path": "https://esm.sh/path@^0.12.7",
     "url": "https://esm.sh/url@^0.11.4",
-    "fs": "https://esm.sh/fs@^0.0.1-security"
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "nodemailer": "https://esm.sh/nodemailer@^7.0.11"
   }
 }
 </script>
@@ -77,7 +78,7 @@
       const SYSTEM_INSTRUCTION = `
 You are a friendly, professional, and warm Digital Consultant for a "Digital Hub" company.
 Your goal is to guide a potential client from a Facebook Ad click to a booked appointment via a conversation.
-Our company email is: boatengkwm@yahoo.com
+Our company email is: jabconcept3@gmail.com
 
 **Your Personality:**
 - Warm, welcoming, and conversational.
@@ -96,7 +97,7 @@ Our company email is: boatengkwm@yahoo.com
    - **CRITICAL:** You must generate a text block that looks like an email summary.
    - Start this specific block with "EMAIL_SUMMARY_START" and end it with "EMAIL_SUMMARY_END".
    - The content inside should be formatted like:
-     "To: boatengkwm@yahoo.com
+     "To: jabconcept3@gmail.com
      Subject: New Appointment: [Service] - [Name]
      
      Name: [Name]
@@ -196,7 +197,7 @@ Our company email is: boatengkwm@yahoo.com
                     {message.text}
                 </div>
                 <div className="bg-gray-100 p-2 text-center text-xs text-green-600 font-semibold border-t border-gray-200">
-                    Sent to boatengkwm@yahoo.com ✓
+                   {message.emailStatus === 'sent' ? 'Email Successfully Sent ✓' : message.emailStatus === 'failed' ? 'Email Failed ✕' : 'Sending Email...'}
                 </div>
                 </div>
             </div>
@@ -250,13 +251,13 @@ Our company email is: boatengkwm@yahoo.com
                 
                 <div className="space-y-6">
                 
-                    {/* Step 1: Manual Key Override */}
+                    {/* Step 1: API Key */}
                     <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
                         <strong className="text-blue-800 text-sm flex items-center gap-2 mb-2">
-                            <Key size={16} /> API Key Setup (Manual Override)
+                            <Key size={16} /> 1. AI API Key (Gemini)
                         </strong>
                         <p className="text-xs text-blue-700 mb-3">
-                           If the server connection isn't working, paste your API Key here directly to force it to work.
+                           Paste your API Key here to enable the Chatbot.
                         </p>
                         
                         <div className="flex gap-2">
@@ -276,20 +277,31 @@ Our company email is: boatengkwm@yahoo.com
                             </button>
                         </div>
                         <div className="mt-2 text-[10px] text-blue-600">
-                            Key is saved securely in your browser's local storage.
-                            <br/>
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Get a key here</a> if you don't have one.
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Get a key here</a>.
                         </div>
                     </div>
 
-                    {/* Step 2: Webhook Info */}
+                    {/* Step 2: Email Setup Info */}
+                    <div className="bg-green-50 p-4 rounded-md border border-green-200">
+                        <strong className="text-green-800 text-sm flex items-center gap-2 mb-1">
+                            <Mail size={16} /> 2. Email Configuration
+                        </strong>
+                        <p className="text-xs text-green-700 mb-2">
+                            To receive actual emails, set these in your Render Environment:
+                        </p>
+                        <ul className="text-xs text-green-700 list-disc list-inside space-y-1">
+                            <li><strong>SMTP_USER:</strong> <code>jabconcept3@gmail.com</code></li>
+                            <li><strong>SMTP_PASS:</strong> Your Gmail App Password</li>
+                        </ul>
+                    </div>
+
+                    {/* Step 3: Webhook Info */}
                     <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200 opacity-80">
                         <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
-                            <Server size={16} /> Webhook Configuration (For WhatsApp)
+                            <Server size={16} /> 3. WhatsApp Webhook
                         </strong>
                         <ul className="text-xs text-yellow-700 list-disc list-inside space-y-1">
                             <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
-                            <li><strong>Method:</strong> <code>POST</code></li>
                         </ul>
                     </div>
                 </div>
@@ -341,13 +353,40 @@ Our company email is: boatengkwm@yahoo.com
                         timestamp: new Date() 
                     }]);
                 } else {
-                    // Fallback welcome message if API fails but key exists (e.g. network)
                     console.error("Welcome message failed:", e);
                     addBotMessage("Hi there! Welcome to our Digital Hub. I'm here to help you get started. What is your name?");
                 }
             } finally {
                 setIsTyping(false);
                 setHasStarted(true);
+            }
+        };
+
+        const triggerEmail = async (emailContent, msgId) => {
+            try {
+                // Extract Subject
+                const subjectMatch = emailContent.match(/Subject: (.*)/);
+                const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
+
+                await fetch('/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: 'jabconcept3@gmail.com',
+                        subject: subject,
+                        text: emailContent
+                    })
+                });
+                
+                // Update UI to show success
+                setMessages(prev => prev.map(m => 
+                    m.id === msgId ? { ...m, emailStatus: 'sent' } : m
+                ));
+            } catch (e) {
+                console.error("Email trigger failed:", e);
+                setMessages(prev => prev.map(m => 
+                    m.id === msgId ? { ...m, emailStatus: 'failed' } : m
+                ));
             }
         };
 
@@ -364,7 +403,19 @@ Our company email is: boatengkwm@yahoo.com
                 const postText = rest[1]?.trim();
 
                 if (preText) processedMessages.push({ id: Date.now() + '-pre', text: preText, sender: Sender.BOT, timestamp: new Date() });
-                processedMessages.push({ id: Date.now() + '-email', text: emailContent, sender: Sender.BOT, timestamp: new Date(), isEmailSummary: true });
+                
+                const emailMsgId = Date.now() + '-email';
+                processedMessages.push({ 
+                    id: emailMsgId, 
+                    text: emailContent, 
+                    sender: Sender.BOT, 
+                    timestamp: new Date(), 
+                    isEmailSummary: true 
+                });
+                
+                // Trigger the actual email send
+                triggerEmail(emailContent, emailMsgId);
+
                 if (postText) processedMessages.push({ id: Date.now() + '-post', text: postText, sender: Sender.BOT, timestamp: new Date() });
             } else {
                 processedMessages.push({ id: Date.now(), text: rawText || "...", sender: Sender.BOT, timestamp: new Date() });
