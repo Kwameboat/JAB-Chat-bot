@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save, CreditCard, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save, CreditCard, AlertTriangle, ExternalLink, Zap } from 'lucide-react';
 import { SYSTEM_INSTRUCTION } from '../services/geminiService';
 
 interface ConnectModalProps {
@@ -45,6 +45,23 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
         <div className="p-6 overflow-y-auto">
           
           <div className="space-y-6">
+
+            {/* ERROR WORKAROUND SECTION */}
+            <div className="bg-orange-50 p-4 rounded-md border border-orange-200">
+                <strong className="text-orange-800 text-sm flex items-center gap-2 mb-2">
+                    <Zap size={16} /> Stuck on Billing Error (OR_BAOOC_03)?
+                </strong>
+                <p className="text-xs text-orange-800 mb-2">
+                    If Google Payments is locking you out, <strong>do not wait</strong>.
+                </p>
+                <ol className="text-xs text-orange-800 list-decimal list-inside space-y-1 font-medium">
+                    <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.</li>
+                    <li>Click the <strong>Project Dropdown</strong> (top left).</li>
+                    <li>Select <strong>"New Project"</strong>.</li>
+                    <li>Click <strong>"Create API Key"</strong> in this new project.</li>
+                    <li>Paste that new key below. It works immediately on the Free Tier!</li>
+                </ol>
+            </div>
           
             {/* Step 1: API Key */}
             <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
@@ -77,11 +94,7 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                     </a>
                     <span className="text-gray-300 hidden sm:inline">|</span>
                     <a href="https://aistudio.google.com/app/plan_information" target="_blank" className="text-purple-600 underline font-bold flex items-center gap-1 hover:text-purple-800">
-                        <CreditCard size={12}/> Setup Billing (Fix Rate Limits)
-                    </a>
-                    <span className="text-gray-300 hidden sm:inline">|</span>
-                    <a href="https://payments.google.com/" target="_blank" className="text-red-500 underline font-bold flex items-center gap-1 hover:text-red-700" title="Resolve OR_BAOOC errors">
-                        <AlertTriangle size={12}/> Fix Payment Errors
+                        <CreditCard size={12}/> Setup Billing
                     </a>
                 </div>
             </div>
