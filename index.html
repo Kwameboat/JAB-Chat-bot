@@ -59,7 +59,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge } from 'lucide-react';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge, Copy, ClipboardCheck } from 'lucide-react';
       import { GoogleGenAI } from '@google/genai';
 
       // --- TYPES & CONSTANTS ---
@@ -230,7 +230,18 @@ Our company email is: jabconcept3@gmail.com
         const isUser = message.sender === Sender.USER;
         const isError = message.sender === Sender.ERROR;
         const isEmail = message.isEmailSummary;
+        const [copied, setCopied] = useState(false);
+        
         const formatTime = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const handleCopy = () => {
+            navigator.clipboard.writeText(message.text)
+                .then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                })
+                .catch(err => console.error("Copy failed", err));
+        };
 
         if (isError) {
              return (
@@ -258,10 +269,12 @@ Our company email is: jabconcept3@gmail.com
                 statusText = '⚠ Simulation Only';
             }
 
-            // Fallback Mailto Link
+            // Fallback Mailto Link with improved encoding
             const subjectMatch = message.text.match(/Subject: (.*)/);
             const subject = subjectMatch ? subjectMatch[1] : "New Appointment";
-            const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message.text)}`;
+            // Replace newlines with CRLF for better mailto compatibility
+            const mailBody = message.text.replace(/\n/g, '\r\n');
+            const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailBody)}`;
 
             return (
             <div className="flex justify-center my-4 animate-fade-in px-4 w-full">
@@ -276,16 +289,26 @@ Our company email is: jabconcept3@gmail.com
                 <div className={`bg-gray-100 p-2 text-center text-xs font-semibold border-t border-gray-200 ${statusColor}`}>
                    {statusText}
                 </div>
-                {/* Manual Send Button if Automated fails or is simulated */}
+                
+                {/* Manual Actions if Automated fails or is simulated */}
                 {(message.emailStatus !== 'sent') && (
-                    <a 
-                        href={mailtoLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block bg-blue-600 hover:bg-blue-700 text-white text-center py-2 text-sm font-bold transition-colors"
-                    >
-                        Tap to Send Email Manually
-                    </a>
+                    <div className="flex border-t border-gray-200">
+                        <a 
+                            href={mailtoLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 bg-white hover:bg-gray-50 text-blue-600 text-center py-3 text-xs font-bold transition-colors border-r border-gray-200 flex items-center justify-center gap-1"
+                        >
+                            <Mail size={14} /> Open App
+                        </a>
+                        <button 
+                            onClick={handleCopy}
+                            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 text-center py-3 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                        >
+                             {copied ? <CheckCheck size={14} className="text-green-600"/> : <Copy size={14} />}
+                             {copied ? "Copied!" : "Copy Text"}
+                        </button>
+                    </div>
                 )}
                 </div>
             </div>

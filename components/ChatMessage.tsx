@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Message, Sender } from '../types';
-import { Check, CheckCheck, Mail, AlertCircle } from 'lucide-react';
+import { Check, CheckCheck, Mail, AlertCircle, Copy, ClipboardCheck } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
@@ -10,9 +10,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.sender === Sender.USER;
   const isError = message.sender === Sender.ERROR;
   const isEmail = message.isEmailSummary;
+  const [copied, setCopied] = useState(false);
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.text)
+        .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(err => console.error("Copy failed", err));
   };
 
   if (isEmail) {
@@ -33,7 +43,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
     // Fallback Mailto Link logic for manual sending
     const subjectMatch = message.text.match(/Subject: (.*)/);
     const subject = subjectMatch ? subjectMatch[1] : "New Appointment";
-    const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message.text)}`;
+    // Improved encoding for newlines
+    const mailBody = message.text.replace(/\n/g, '\r\n');
+    const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailBody)}`;
 
     return (
       <div className="flex justify-center my-4 animate-fade-in px-4 w-full">
@@ -49,16 +61,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
              {statusText}
           </div>
           
-          {/* Manual Send Button if Automated fails or is simulated */}
+          {/* Manual Send Buttons */}
           {(message.emailStatus !== 'sent') && (
-            <a 
-                href={mailtoLink}
-                target="_blank"
-                rel="noreferrer"
-                className="block bg-blue-600 hover:bg-blue-700 text-white text-center py-2 text-sm font-bold transition-colors"
-            >
-                Tap to Send Email Manually
-            </a>
+            <div className="flex border-t border-gray-200">
+                <a 
+                    href={mailtoLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 bg-white hover:bg-gray-50 text-blue-600 text-center py-3 text-xs font-bold transition-colors border-r border-gray-200 flex items-center justify-center gap-1"
+                >
+                    <Mail size={14} /> Open App
+                </a>
+                <button 
+                    onClick={handleCopy}
+                    className="flex-1 bg-white hover:bg-gray-50 text-gray-700 text-center py-3 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                >
+                     {copied ? <CheckCheck size={14} className="text-green-600"/> : <Copy size={14} />}
+                     {copied ? "Copied!" : "Copy Text"}
+                </button>
+            </div>
           )}
         </div>
       </div>
