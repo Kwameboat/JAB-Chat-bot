@@ -1,7 +1,8 @@
 export enum Sender {
   USER = 'user',
   BOT = 'bot',
-  SYSTEM = 'system'
+  SYSTEM = 'system',
+  ERROR = 'error'
 }
 
 export interface Message {
@@ -10,6 +11,7 @@ export interface Message {
   sender: Sender;
   timestamp: Date;
   isEmailSummary?: boolean; // Flag to style the final email summary differently
+  emailStatus?: 'sending' | 'sent' | 'failed' | 'simulated';
 }
 
 export interface BookingDetails {

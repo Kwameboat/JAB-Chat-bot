@@ -89,6 +89,7 @@ export const sendMessageToGemini = async (message: string): Promise<string> => {
     return result.text;
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "I'm having a little trouble connecting to our scheduler right now. Could you please say that again?";
+    // Allow the caller (UI) to handle specific errors like 429
+    throw error;
   }
 };

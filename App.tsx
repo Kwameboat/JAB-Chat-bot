@@ -64,7 +64,7 @@ function App() {
         const subjectMatch = emailContent.match(/Subject: (.*)/);
         const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
 
-        await fetch('/send-email', {
+        const response = await fetch('/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -74,9 +74,19 @@ function App() {
             })
         });
         
+        const data = await response.json();
+        
+        // Determine status based on response
+        let newStatus: 'sent' | 'failed' | 'simulated' = 'failed';
+        if (data.simulated) {
+            newStatus = 'simulated';
+        } else if (data.success) {
+            newStatus = 'sent';
+        }
+
         // Update UI to show success in the message object (needs type extension if strictly typed, forcing here for demo)
         setMessages(prev => prev.map(m => 
-            m.id === msgId ? { ...m, emailStatus: 'sent' } : m
+            m.id === msgId ? { ...m, emailStatus: newStatus } : m
         ));
     } catch (e) {
         console.error("Email trigger failed:", e);
@@ -168,12 +178,34 @@ function App() {
       const response = await sendMessageToGemini(inputText);
       setIsTyping(false);
       addBotMessage(response);
-    } catch (error) {
+    } catch (error: any) {
       setIsTyping(false);
+      let errorMessage = "Connection error. Please try again.";
+      
+      const errorStr = error.toString();
+      const errorMsg = error.message || errorStr;
+
+      if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429")) {
+          const waitTimeMatch = errorMsg.match(/retry in (\d+(\.\d+)?)s/);
+          const waitTime = waitTimeMatch ? Math.ceil(parseFloat(waitTimeMatch[1])) : 30;
+          errorMessage = `⚠️ High Traffic Warning: Our AI consultant is currently experiencing high demand. Please wait ${waitTime} seconds before sending your next message.`;
+      } else {
+           // Try to extract a clean message if it's a JSON string
+           try {
+              const match = errorMsg.match(/{.*}/);
+              if (match) {
+                  const errObj = JSON.parse(match[0]);
+                  if (errObj.error && errObj.error.message) {
+                      errorMessage = `Error: ${errObj.error.message}`;
+                  }
+              }
+           } catch(e) {}
+      }
+
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
-        text: "I apologize, I'm having trouble connecting to the server. Please check your internet connection.",
-        sender: Sender.BOT,
+        text: errorMessage,
+        sender: Sender.ERROR,
         timestamp: new Date()
       }]);
     }
