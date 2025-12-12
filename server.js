@@ -19,19 +19,6 @@ app.use(express.static(__dirname));
 
 // Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY;
-const COMPANY_EMAIL = 'jabconcept3@gmail.com';
-
-// Email Configuration (SMTP)
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-// Defaults to Gmail service, but can be configured for others if needed
-const EMAIL_TRANSPORTER = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS
-  }
-});
 
 if (!GEMINI_API_KEY) {
     console.warn("⚠️  [Server] WARNING: API_KEY is missing in the environment variables!");
@@ -39,11 +26,6 @@ if (!GEMINI_API_KEY) {
     console.log(`✅ [Server] API Key found (Length: ${GEMINI_API_KEY.length})`);
 }
 
-if (!SMTP_USER || !SMTP_PASS) {
-    console.warn("⚠️  [Server] WARNING: SMTP_USER or SMTP_PASS missing. Emails will only be logged to console, not sent.");
-}
-
-// System Instruction
 const SERVICES_LIST = [
   "Website Design",
   "Company Management Systems",
@@ -57,7 +39,6 @@ const SERVICES_LIST = [
 const SYSTEM_INSTRUCTION = `
 You are a friendly, professional, and warm Digital Consultant for a "Digital Hub" company.
 Your goal is to guide a potential client from a Facebook Ad click to a booked appointment via a conversation.
-Our company email is: ${COMPANY_EMAIL}
 
 **Your Personality:**
 - Warm, welcoming, and conversational.
@@ -71,50 +52,26 @@ Our company email is: ${COMPANY_EMAIL}
 3. **Goal/Problem:** When they pick a service, ask a specific follow-up about their goal or the problem they want to solve.
 4. **Budget:** Gently ask about their budget. Invite them to share a specific amount or a range (Low, Medium, Premium).
 5. **Confirmation:** Summarize their Name, Service, Goal, and Budget. Ask them to confirm.
-6. **Booking & Email:**
-   - If they confirm, tell them you are booking the appointment.
-   - **CRITICAL:** You must generate a text block that looks like an email summary.
-   - Start this specific block with "EMAIL_SUMMARY_START" and end it with "EMAIL_SUMMARY_END".
-   - The content inside should be formatted like:
-     "To: ${COMPANY_EMAIL}
-     Subject: New Appointment: [Service] - [Name]
+6. **Booking & WhatsApp Handoff:**
+   - If they confirm, tell them you are generating the confirmation.
+   - **CRITICAL:** You must generate a text block summarizing the appointment for WhatsApp.
+   - Start this specific block with "APPOINTMENT_SUMMARY_START" and end it with "APPOINTMENT_SUMMARY_END".
+   - The content inside should be formatted cleanly for a WhatsApp message:
+     "📅 *New Appointment Request*
      
-     Name: [Name]
-     Service: [Service]
-     Goal: [Goal]
-     Budget: [Budget]
-     Status: Pending Appointment"
-   - After the block, tell the user the appointment is booked and give a warm next step.
+     👤 *Name:* [Name]
+     🛠 *Service:* [Service]
+     🎯 *Goal:* [Goal]
+     💰 *Budget:* [Budget]
+     
+     *Status:* Pending Final Confirmation"
+   - After the block, tell the user to click the button below to send this directly to our business WhatsApp line.
 `;
 
 // Initialize Gemini
 let aiClient = null;
 if (GEMINI_API_KEY) {
   aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-}
-
-// --- EMAIL SENDING HELPER ---
-async function sendEmail(to, subject, text) {
-    console.log(`📧 [Email Request] To: ${to}, Subject: ${subject}`);
-    
-    if (!SMTP_USER || !SMTP_PASS) {
-        console.log(`📝 [Email Simulation] Content:\n${text}\n(Configure SMTP_USER & SMTP_PASS to send real emails)`);
-        return { success: true, simulated: true };
-    }
-
-    try {
-        const info = await EMAIL_TRANSPORTER.sendMail({
-            from: `"Digital Hub Bot" <${SMTP_USER}>`,
-            to: to,
-            subject: subject,
-            text: text
-        });
-        console.log("✅ [Email Sent] Message ID:", info.messageId);
-        return { success: true, id: info.messageId };
-    } catch (error) {
-        console.error("❌ [Email Failed]", error);
-        throw error;
-    }
 }
 
 // --- ROUTES ---
@@ -132,15 +89,9 @@ app.get('/', (req, res) => {
     });
 });
 
-// Endpoint for Frontend to trigger email
+// Endpoint kept for backward compatibility if needed, but UI now prefers WhatsApp link
 app.post('/send-email', async (req, res) => {
-    const { to, subject, text } = req.body;
-    try {
-        const result = await sendEmail(to || COMPANY_EMAIL, subject || "New Digital Hub Appointment", text);
-        res.json(result);
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    res.json({ success: true, simulated: true, message: "Email endpoint deprecated in favor of WhatsApp redirection." });
 });
 
 // Backend Webhook for WhatsApp
@@ -161,7 +112,7 @@ app.post('/webhook', async (req, res) => {
     }
 
     const chat = aiClient.chats.create({
-      model: 'gemini-flash-lite-latest', // Use Lite model for webhook stability
+      model: 'gemini-flash-lite-latest', 
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.7,
@@ -172,20 +123,6 @@ app.post('/webhook', async (req, res) => {
     const botResponse = result.text;
     
     console.log("🤖 AI Response Generated:", botResponse);
-
-    // Check if response contains email summary and trigger email from backend automatically
-    if (botResponse.includes('EMAIL_SUMMARY_START') && botResponse.includes('EMAIL_SUMMARY_END')) {
-        const parts = botResponse.split('EMAIL_SUMMARY_START');
-        const rest = parts[1].split('EMAIL_SUMMARY_END');
-        const emailContent = rest[0].trim();
-        
-        // Extract Subject line if possible
-        const subjectMatch = emailContent.match(/Subject: (.*)/);
-        const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
-
-        // Send email (fire and forget)
-        sendEmail(COMPANY_EMAIL, subject, emailContent).catch(e => console.error("Webhook email trigger failed:", e));
-    }
 
     res.status(200).json({ reply: botResponse });
 

@@ -59,7 +59,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge, Copy, ClipboardCheck } from 'lucide-react';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge, Copy, ClipboardCheck, MessageCircle, ArrowRight } from 'lucide-react';
       import { GoogleGenAI } from '@google/genai';
 
       // --- TYPES & CONSTANTS ---
@@ -78,7 +78,6 @@
       const SYSTEM_INSTRUCTION = `
 You are a friendly, professional, and warm Digital Consultant for a "Digital Hub" company.
 Your goal is to guide a potential client from a Facebook Ad click to a booked appointment via a conversation.
-Our company email is: jabconcept3@gmail.com
 
 **Your Personality:**
 - Warm, welcoming, and conversational.
@@ -90,22 +89,22 @@ Our company email is: jabconcept3@gmail.com
 1. **Welcome & Name:** Warmly welcome them (assume they came from an ad). Ask for their name.
 2. **Service Selection:** Once they give their name, ask what they are looking for. Present the services naturally: ${SERVICES_LIST.join(", ")}.
 3. **Goal/Problem:** When they pick a service, ask a specific follow-up about their goal or the problem they want to solve.
-4. **Budget:** Gently ask about their budget. Invite them to share a specific amount or a range (Low, Medium, Premium).
+4. **Budget:** Gently ask about their budget. Invite them to share a specific amount (e.g., "GHC 200") or a general range (Low, Medium, Premium) that works for them.
 5. **Confirmation:** Summarize their Name, Service, Goal, and Budget. Ask them to confirm.
-6. **Booking & Email:**
-   - If they confirm, tell them you are booking the appointment.
-   - **CRITICAL:** You must generate a text block that looks like an email summary.
-   - Start this specific block with "EMAIL_SUMMARY_START" and end it with "EMAIL_SUMMARY_END".
-   - The content inside should be formatted like:
-     "To: jabconcept3@gmail.com
-     Subject: New Appointment: [Service] - [Name]
+6. **Booking & WhatsApp Handoff:**
+   - If they confirm, tell them you are generating the confirmation.
+   - **CRITICAL:** You must generate a text block summarizing the appointment for WhatsApp.
+   - Start this specific block with "APPOINTMENT_SUMMARY_START" and end it with "APPOINTMENT_SUMMARY_END".
+   - The content inside should be formatted cleanly for a WhatsApp message:
+     "📅 *New Appointment Request*
      
-     Name: [Name]
-     Service: [Service]
-     Goal: [Goal]
-     Budget: [Budget]
-     Status: Pending Appointment"
-   - After the block, tell the user the appointment is booked and give a warm next step.
+     👤 *Name:* [Name]
+     🛠 *Service:* [Service]
+     🎯 *Goal:* [Goal]
+     💰 *Budget:* [Budget]
+     
+     *Status:* Pending Final Confirmation"
+   - After the block, tell the user to click the button below to send this directly to our business WhatsApp line.
 `;
 
       // --- HELPER: Get Effective API Key ---
@@ -134,7 +133,6 @@ Our company email is: jabconcept3@gmail.com
           return false;
         }
 
-        // Logic: Default to Lite unless explicitly disabled
         const storedPref = localStorage.getItem('gemini_use_lite');
         let useLite = true; 
         if (storedPref === 'false') useLite = false;
@@ -183,16 +181,11 @@ Our company email is: jabconcept3@gmail.com
                 // Check for 429 (Quota Exceeded) or 503
                 if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429") || errStr.includes("503")) {
                     
-                    // AUTO-FALLBACK: Switch to Lite if on standard
                     if (currentModelName !== 'gemini-flash-lite-latest') {
                         const fallbackMsg = "⚠️ High traffic. Switching to Lite model...";
-                        console.warn(fallbackMsg);
                         if (onStatusUpdate) onStatusUpdate(fallbackMsg);
-                        
-                        // Force Lite and Save
                         initializeChat(true);
                         localStorage.setItem('gemini_use_lite', 'true');
-                        
                         attempt = 0; 
                         await delayPromise(1000);
                         continue; 
@@ -204,16 +197,8 @@ Our company email is: jabconcept3@gmail.com
                     const match = errMsg.match(/retry in (\d+(\.\d+)?)s/);
                     const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 5;
                     const safeWait = waitSeconds + 1;
-
-                    const statusMsg = `⏳ High traffic. Waiting ${safeWait}s...`;
-                    console.warn(statusMsg);
-                    
-                    if (onStatusUpdate) {
-                        onStatusUpdate(statusMsg);
-                    }
-
+                    if (onStatusUpdate) onStatusUpdate(`⏳ High traffic. Waiting ${safeWait}s...`);
                     await delayPromise(safeWait * 1000);
-                    
                     if (onStatusUpdate) onStatusUpdate("Retrying...");
                     continue;
                 }
@@ -229,18 +214,17 @@ Our company email is: jabconcept3@gmail.com
       const ChatMessage = ({ message }) => {
         const isUser = message.sender === Sender.USER;
         const isError = message.sender === Sender.ERROR;
-        const isEmail = message.isEmailSummary;
+        const isSummary = message.isEmailSummary; // Reuse logic for Summary
         const [copied, setCopied] = useState(false);
-        
+        const businessNumber = localStorage.getItem('gemini_business_number') || '233541234567'; // Default placeholder
+
         const formatTime = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         const handleCopy = () => {
-            navigator.clipboard.writeText(message.text)
-                .then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                })
-                .catch(err => console.error("Copy failed", err));
+            navigator.clipboard.writeText(message.text).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            });
         };
 
         if (isError) {
@@ -254,62 +238,42 @@ Our company email is: jabconcept3@gmail.com
              );
         }
 
-        if (isEmail) {
-            let statusColor = 'text-gray-600';
-            let statusText = 'Sending Email...';
-            
-            if (message.emailStatus === 'sent') {
-                statusColor = 'text-green-600';
-                statusText = 'Email Successfully Sent ✓';
-            } else if (message.emailStatus === 'failed') {
-                statusColor = 'text-red-600';
-                statusText = 'Email Failed ✕';
-            } else if (message.emailStatus === 'simulated') {
-                statusColor = 'text-orange-600';
-                statusText = '⚠ Simulation Only';
-            }
-
-            // Fallback Mailto Link with improved encoding
-            const subjectMatch = message.text.match(/Subject: (.*)/);
-            const subject = subjectMatch ? subjectMatch[1] : "New Appointment";
-            // Replace newlines with CRLF for better mailto compatibility
-            const mailBody = message.text.replace(/\n/g, '\r\n');
-            const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailBody)}`;
+        if (isSummary) {
+            const whatsappUrl = `https://wa.me/${businessNumber}?text=${encodeURIComponent(message.text)}`;
 
             return (
             <div className="flex justify-center my-4 animate-fade-in px-4 w-full">
-                <div className="bg-white rounded-lg shadow-md border border-gray-200 w-full max-w-sm overflow-hidden">
-                <div className="bg-teal-600 text-white p-3 flex items-center gap-2">
-                    <Mail size={18} />
-                    <span className="font-medium text-sm">System Email</span>
-                </div>
-                <div className="p-4 text-xs font-mono text-gray-700 whitespace-pre-wrap bg-gray-50">
-                    {message.text}
-                </div>
-                <div className={`bg-gray-100 p-2 text-center text-xs font-semibold border-t border-gray-200 ${statusColor}`}>
-                   {statusText}
+                <div className="bg-white rounded-lg shadow-md border border-green-100 w-full max-w-sm overflow-hidden">
+                <div className="bg-[#25D366] text-white p-3 flex items-center gap-2">
+                    <MessageCircle size={20} />
+                    <span className="font-bold text-sm">Appointment Ready</span>
                 </div>
                 
-                {/* Manual Actions if Automated fails or is simulated */}
-                {(message.emailStatus !== 'sent') && (
-                    <div className="flex border-t border-gray-200">
-                        <a 
-                            href={mailtoLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 bg-white hover:bg-gray-50 text-blue-600 text-center py-3 text-xs font-bold transition-colors border-r border-gray-200 flex items-center justify-center gap-1"
-                        >
-                            <Mail size={14} /> Open App
-                        </a>
-                        <button 
-                            onClick={handleCopy}
-                            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 text-center py-3 text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                        >
-                             {copied ? <CheckCheck size={14} className="text-green-600"/> : <Copy size={14} />}
-                             {copied ? "Copied!" : "Copy Text"}
-                        </button>
+                <div className="p-4 bg-green-50/50">
+                    <div className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wider">Confirm Details</div>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed border-l-4 border-[#25D366] pl-3 py-1">
+                        {message.text}
                     </div>
-                )}
+                </div>
+
+                <div className="bg-white p-3 border-t border-gray-100 flex flex-col gap-2">
+                    <a 
+                        href={whatsappUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 w-full bg-[#075E54] hover:bg-[#064c44] text-white py-3 rounded-lg font-semibold text-sm transition-transform active:scale-95 shadow-sm"
+                    >
+                        <span>Send to Business WhatsApp</span>
+                        <ArrowRight size={16} />
+                    </a>
+                    
+                    <button 
+                        onClick={handleCopy}
+                        className="text-xs text-gray-400 hover:text-gray-600 font-medium py-1 flex items-center justify-center gap-1"
+                    >
+                        {copied ? "Copied to clipboard" : "Copy text only"}
+                    </button>
+                </div>
                 </div>
             </div>
             );
@@ -331,6 +295,7 @@ Our company email is: jabconcept3@gmail.com
       // ConnectModal Component
       const ConnectModal = ({ isOpen, onClose }) => {
         const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
+        const [businessNumber, setBusinessNumber] = useState(localStorage.getItem('gemini_business_number') || '');
         const storedLitePref = localStorage.getItem('gemini_use_lite');
         const initialLiteState = storedLitePref === 'false' ? false : true; 
         const [useLite, setUseLite] = useState(initialLiteState);
@@ -342,6 +307,13 @@ Our company email is: jabconcept3@gmail.com
             } else {
                 localStorage.removeItem('gemini_api_key');
             }
+            
+            if (businessNumber.trim()) {
+                localStorage.setItem('gemini_business_number', businessNumber.trim().replace(/\+/g, ''));
+            } else {
+                localStorage.removeItem('gemini_business_number');
+            }
+
             localStorage.setItem('gemini_use_lite', String(useLite));
 
             setShowSuccess(true);
@@ -367,32 +339,20 @@ Our company email is: jabconcept3@gmail.com
                 
                 <div className="space-y-6">
 
-                     {/* ERROR WORKAROUND SECTION */}
-                    <div className="bg-orange-50 p-4 rounded-md border border-orange-200">
+                     <div className="bg-orange-50 p-4 rounded-md border border-orange-200">
                         <strong className="text-orange-800 text-sm flex items-center gap-2 mb-2">
-                            <Zap size={16} /> Stuck on Billing Error (OR_BAOOC_03)?
+                            <Zap size={16} /> Gemini API Config
                         </strong>
                         <p className="text-xs text-orange-800 mb-2">
-                            If Google Payments is locking you out, <strong>do not wait</strong>.
+                            Get a free API Key from <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.
                         </p>
-                        <ol className="text-xs text-orange-800 list-decimal list-inside space-y-1 font-medium">
-                            <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.</li>
-                            <li>Click the <strong>Project Dropdown</strong> (top left).</li>
-                            <li>Select <strong>"New Project"</strong>.</li>
-                            <li>Click <strong>"Create API Key"</strong> in this new project.</li>
-                            <li>Paste that new key below. It works immediately on the Free Tier!</li>
-                        </ol>
                     </div>
                 
                     {/* Step 1: API Key */}
                     <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
                         <strong className="text-blue-800 text-sm flex items-center gap-2 mb-2">
-                            <Key size={16} /> 1. AI API Key (Gemini)
+                            <Key size={16} /> 1. AI API Key (Required)
                         </strong>
-                        <p className="text-xs text-blue-700 mb-3">
-                           Paste your API Key here to enable the Chatbot.
-                        </p>
-                        
                         <div className="flex gap-2 mb-3">
                             <input 
                                 type="password" 
@@ -401,17 +361,30 @@ Our company email is: jabconcept3@gmail.com
                                 placeholder="Paste your AIza... key here"
                                 className="flex-1 px-3 py-2 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                            <button 
-                                onClick={handleSave}
-                                className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition flex items-center gap-1"
-                            >
-                                {showSuccess ? <CheckCheck size={16}/> : <Save size={16}/>}
-                                {showSuccess ? "Saved!" : "Save"}
-                            </button>
                         </div>
-                        
-                        {/* Lite Model Toggle */}
-                        <div className="flex items-start gap-3 bg-white p-3 rounded border border-blue-100">
+                    </div>
+
+                    {/* Step 2: Business WhatsApp Number */}
+                    <div className="bg-green-50 p-4 rounded-md border border-green-200">
+                        <strong className="text-green-800 text-sm flex items-center gap-2 mb-2">
+                            <MessageCircle size={16} /> 2. Business WhatsApp Number
+                        </strong>
+                        <p className="text-xs text-green-700 mb-2">
+                            Where should confirmations be sent? (Enter format like 233555XXXXXX)
+                        </p>
+                        <div className="flex gap-2 mb-3">
+                            <input 
+                                type="text" 
+                                value={businessNumber}
+                                onChange={(e) => setBusinessNumber(e.target.value)}
+                                placeholder="e.g. 233541234567"
+                                className="flex-1 px-3 py-2 text-sm border border-green-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-start gap-3 bg-white p-3 rounded border border-gray-200">
                             <input 
                                 type="checkbox" 
                                 id="liteModel" 
@@ -424,52 +397,18 @@ Our company email is: jabconcept3@gmail.com
                                     <Gauge size={16} className="text-purple-600"/> 
                                     Use 'Lite' Model (Recommended)
                                 </div>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                    Highly recommended for Free Tier. Switches to <code>gemini-flash-lite</code> which is faster and prevents "High Traffic" errors.
-                                </p>
                             </label>
                         </div>
 
-                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-600 underline font-bold flex items-center gap-1 hover:text-blue-800">
-                                <Key size={12}/> Get a key here
-                            </a>
-                            <span className="text-gray-300 hidden sm:inline">|</span>
-                            <a href="https://aistudio.google.com/app/plan_information" target="_blank" className="text-purple-600 underline font-bold flex items-center gap-1 hover:text-purple-800">
-                                <CreditCard size={12}/> Setup Billing
-                            </a>
-                        </div>
+                        <button 
+                            onClick={handleSave}
+                            className="w-full bg-[#075E54] text-white px-4 py-3 rounded-lg text-sm font-semibold hover:bg-[#064c44] transition flex items-center justify-center gap-2"
+                        >
+                            {showSuccess ? <CheckCheck size={18}/> : <Save size={18}/>}
+                            {showSuccess ? "Settings Saved!" : "Save Settings"}
+                        </button>
                     </div>
 
-                    {/* Step 2: Email Setup Info */}
-                    <div className="bg-green-50 p-4 rounded-md border border-green-200">
-                        <strong className="text-green-800 text-sm flex items-center gap-2 mb-1">
-                            <Mail size={16} /> 2. Email Configuration
-                        </strong>
-                        <p className="text-xs text-green-700 mb-2">
-                            To send real emails, you must set these <strong>Environment Variables</strong> in Render:
-                        </p>
-                        <ul className="text-xs text-green-700 list-disc list-inside space-y-2">
-                            <li><strong>SMTP_USER:</strong> <code>jabconcept3@gmail.com</code></li>
-                            <li><strong>SMTP_PASS:</strong> 
-                                <span className="bg-green-100 px-1 rounded border border-green-300">Requires App Password!</span>
-                                <br/>
-                                <span className="text-[10px] ml-4">
-                                   (Go to Google Account → Security → 2-Step Verification → App Passwords)
-                                </span>
-                            </li>
-                        </ul>
-                    </div>
-
-                    {/* Step 3: Webhook Info */}
-                    <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200 opacity-80">
-                        <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
-                            <Server size={16} /> 3. WhatsApp Webhook
-                        </strong>
-                        <ul className="text-xs text-yellow-700 list-disc list-inside space-y-1">
-                            <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
-                        </ul>
-                    </div>
                 </div>
                 </div>
             </div>
@@ -487,9 +426,7 @@ Our company email is: jabconcept3@gmail.com
         const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
         const messagesEndRef = useRef(null);
         
-        // Check availability
-        const effectiveKey = getEffectiveApiKey();
-        const isApiKeyMissing = !effectiveKey;
+        const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === '__GENAI_API_KEY__'; // Basic check only for UI hint
 
         const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         
@@ -498,7 +435,6 @@ Our company email is: jabconcept3@gmail.com
         useEffect(() => {
             initializeChat();
             
-            // Auto-open modal if absolutely no key found
             if (isApiKeyMissing) {
                 setIsConnectModalOpen(true);
             }
@@ -515,7 +451,7 @@ Our company email is: jabconcept3@gmail.com
                 if (e.message === "API_KEY_MISSING") {
                     setMessages(prev => [...prev, { 
                         id: Date.now(), 
-                        text: "Welcome! To get started, please click the 'Link/Connect' icon above and paste your API Key.", 
+                        text: "Welcome! To get started, please click the 'Setup' icon above and paste your API Key.", 
                         sender: Sender.ERROR, 
                         timestamp: new Date() 
                     }]);
@@ -529,70 +465,31 @@ Our company email is: jabconcept3@gmail.com
             }
         };
 
-        const triggerEmail = async (emailContent, msgId) => {
-            try {
-                // Extract Subject
-                const subjectMatch = emailContent.match(/Subject: (.*)/);
-                const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
-
-                const response = await fetch('/send-email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: 'jabconcept3@gmail.com',
-                        subject: subject,
-                        text: emailContent
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Determine status based on response
-                let newStatus = 'failed';
-                if (data.simulated) {
-                    newStatus = 'simulated';
-                } else if (data.success) {
-                    newStatus = 'sent';
-                }
-
-                // Update UI to show success or simulation status
-                setMessages(prev => prev.map(m => 
-                    m.id === msgId ? { ...m, emailStatus: newStatus } : m
-                ));
-            } catch (e) {
-                console.error("Email trigger failed:", e);
-                setMessages(prev => prev.map(m => 
-                    m.id === msgId ? { ...m, emailStatus: 'failed' } : m
-                ));
-            }
-        };
-
         const addBotMessage = (rawText) => {
-            const emailStartTag = "EMAIL_SUMMARY_START";
-            const emailEndTag = "EMAIL_SUMMARY_END";
+            // NEW TAGS for WhatsApp flow
+            const startTag = "APPOINTMENT_SUMMARY_START";
+            const endTag = "APPOINTMENT_SUMMARY_END";
+            
             let processedMessages = [];
             
-            if (rawText && rawText.includes(emailStartTag) && rawText.includes(emailEndTag)) {
-                const parts = rawText.split(emailStartTag);
+            if (rawText && rawText.includes(startTag) && rawText.includes(endTag)) {
+                const parts = rawText.split(startTag);
                 const preText = parts[0].trim();
-                const rest = parts[1].split(emailEndTag);
-                const emailContent = rest[0].trim();
+                const rest = parts[1].split(endTag);
+                const summaryContent = rest[0].trim();
                 const postText = rest[1]?.trim();
 
                 if (preText) processedMessages.push({ id: Date.now() + '-pre', text: preText, sender: Sender.BOT, timestamp: new Date() });
                 
-                const emailMsgId = Date.now() + '-email';
+                // Add Summary Card
                 processedMessages.push({ 
-                    id: emailMsgId, 
-                    text: emailContent, 
+                    id: Date.now() + '-summary', 
+                    text: summaryContent, 
                     sender: Sender.BOT, 
                     timestamp: new Date(), 
                     isEmailSummary: true 
                 });
                 
-                // Trigger the actual email send
-                triggerEmail(emailContent, emailMsgId);
-
                 if (postText) processedMessages.push({ id: Date.now() + '-post', text: postText, sender: Sender.BOT, timestamp: new Date() });
             } else {
                 processedMessages.push({ id: Date.now(), text: rawText || "...", sender: Sender.BOT, timestamp: new Date() });
@@ -627,7 +524,7 @@ Our company email is: jabconcept3@gmail.com
                 if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
                      errorMessage = "⚠️ High Traffic: Maximum retries exceeded. Please try again in 1 minute.";
                 } else if (error.message === 'API_KEY_MISSING') {
-                    errorMessage = "Setup Required: Click the Link icon above to set your API Key.";
+                    errorMessage = "Setup Required: Click the Setup icon above to set your API Key.";
                     setIsConnectModalOpen(true);
                 } else {
                      try {
@@ -668,7 +565,7 @@ Our company email is: jabconcept3@gmail.com
                             <button 
                                 onClick={() => setIsConnectModalOpen(true)} 
                                 className={`hover:bg-white/10 p-1.5 rounded-full transition-colors flex items-center gap-1 ${isApiKeyMissing ? 'bg-white/20 animate-pulse text-yellow-300' : ''}`} 
-                                title="Connect & Setup"
+                                title="Settings"
                             >
                                 <Link2 size={20} />
                                 {isApiKeyMissing && <span className="text-[10px] font-bold">SETUP</span>}

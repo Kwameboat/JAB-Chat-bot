@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Message, Sender } from '../types';
-import { Check, CheckCheck, Mail, AlertCircle, Copy, ClipboardCheck } from 'lucide-react';
+import { Check, CheckCheck, MessageCircle, AlertCircle, Copy, ArrowRight } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
@@ -9,8 +9,11 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.sender === Sender.USER;
   const isError = message.sender === Sender.ERROR;
-  const isEmail = message.isEmailSummary;
+  const isSummary = message.isEmailSummary; // We reuse this flag for Appointment Summary
   const [copied, setCopied] = useState(false);
+
+  // Retrieve business number from storage or default
+  const businessNumber = localStorage.getItem('gemini_business_number') || '233541234567'; 
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -25,62 +28,43 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         .catch(err => console.error("Copy failed", err));
   };
 
-  if (isEmail) {
-    let statusColor = 'text-gray-600';
-    let statusText = 'Sending Email...';
-    
-    if (message.emailStatus === 'sent') {
-        statusColor = 'text-green-600';
-        statusText = 'Email Successfully Sent ✓';
-    } else if (message.emailStatus === 'failed') {
-        statusColor = 'text-red-600';
-        statusText = 'Email Failed ✕';
-    } else if (message.emailStatus === 'simulated') {
-        statusColor = 'text-orange-600';
-        statusText = '⚠ Simulation Only';
-    }
-
-    // Fallback Mailto Link logic for manual sending
-    const subjectMatch = message.text.match(/Subject: (.*)/);
-    const subject = subjectMatch ? subjectMatch[1] : "New Appointment";
-    // Improved encoding for newlines
-    const mailBody = message.text.replace(/\n/g, '\r\n');
-    const mailtoLink = `mailto:jabconcept3@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailBody)}`;
+  if (isSummary) {
+    // Generate WhatsApp Link
+    const whatsappUrl = `https://wa.me/${businessNumber}?text=${encodeURIComponent(message.text)}`;
 
     return (
       <div className="flex justify-center my-4 animate-fade-in px-4 w-full">
-        <div className="bg-white rounded-lg shadow-md border border-gray-200 w-full max-w-sm overflow-hidden">
-          <div className="bg-teal-600 text-white p-3 flex items-center gap-2">
-            <Mail size={18} />
-            <span className="font-medium text-sm">System Email</span>
-          </div>
-          <div className="p-4 text-xs font-mono text-gray-700 whitespace-pre-wrap bg-gray-50">
-            {message.text}
-          </div>
-          <div className={`bg-gray-100 p-2 text-center text-xs font-semibold border-t border-gray-200 ${statusColor}`}>
-             {statusText}
+        <div className="bg-white rounded-lg shadow-md border border-green-100 w-full max-w-sm overflow-hidden">
+          <div className="bg-[#25D366] text-white p-3 flex items-center gap-2">
+            <MessageCircle size={20} />
+            <span className="font-bold text-sm">Appointment Ready</span>
           </div>
           
-          {/* Manual Send Buttons */}
-          {(message.emailStatus !== 'sent') && (
-            <div className="flex border-t border-gray-200">
-                <a 
-                    href={mailtoLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex-1 bg-white hover:bg-gray-50 text-blue-600 text-center py-3 text-xs font-bold transition-colors border-r border-gray-200 flex items-center justify-center gap-1"
-                >
-                    <Mail size={14} /> Open App
-                </a>
-                <button 
-                    onClick={handleCopy}
-                    className="flex-1 bg-white hover:bg-gray-50 text-gray-700 text-center py-3 text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                >
-                     {copied ? <CheckCheck size={14} className="text-green-600"/> : <Copy size={14} />}
-                     {copied ? "Copied!" : "Copy Text"}
-                </button>
-            </div>
-          )}
+          <div className="p-4 bg-green-50/50">
+             <div className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wider">Confirm Details</div>
+             <div className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed border-l-4 border-[#25D366] pl-3 py-1">
+                {message.text}
+             </div>
+          </div>
+
+          <div className="bg-white p-3 border-t border-gray-100 flex flex-col gap-2">
+             <a 
+                href={whatsappUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-2 w-full bg-[#075E54] hover:bg-[#064c44] text-white py-3 rounded-lg font-semibold text-sm transition-transform active:scale-95 shadow-sm"
+            >
+                <span>Send to Business WhatsApp</span>
+                <ArrowRight size={16} />
+            </a>
+            
+            <button 
+                onClick={handleCopy}
+                className="text-xs text-gray-400 hover:text-gray-600 font-medium py-1 flex items-center justify-center gap-1"
+            >
+                {copied ? "Copied to clipboard" : "Copy text only"}
+            </button>
+          </div>
         </div>
       </div>
     );

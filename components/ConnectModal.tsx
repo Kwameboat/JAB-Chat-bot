@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save, CreditCard, AlertTriangle, ExternalLink, Zap, Gauge } from 'lucide-react';
-import { SYSTEM_INSTRUCTION } from '../services/geminiService';
+import { X, Server, CheckCheck, Key, Save, CreditCard, Zap, Gauge, MessageCircle } from 'lucide-react';
 
 interface ConnectModalProps {
   isOpen: boolean;
@@ -9,8 +8,8 @@ interface ConnectModalProps {
 
 export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) => {
   const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [businessNumber, setBusinessNumber] = useState(localStorage.getItem('gemini_business_number') || '');
   
-  // LOGIC UPDATE: Default to TRUE if not set. 'false' string means explicitly disabled.
   const storedLitePref = localStorage.getItem('gemini_use_lite');
   const initialLiteState = storedLitePref === 'false' ? false : true; 
   
@@ -23,14 +22,19 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
     } else {
         localStorage.removeItem('gemini_api_key');
     }
+
+    if (businessNumber.trim()) {
+        localStorage.setItem('gemini_business_number', businessNumber.trim().replace(/\+/g, ''));
+    } else {
+        localStorage.removeItem('gemini_business_number');
+    }
     
-    // Save model preference
     localStorage.setItem('gemini_use_lite', String(useLite));
 
     setShowSuccess(true);
     setTimeout(() => {
         setShowSuccess(false);
-        window.location.reload(); // Reload to pick up new key/settings
+        window.location.reload(); 
     }, 1000);
   };
 
@@ -59,28 +63,18 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
             {/* ERROR WORKAROUND SECTION */}
             <div className="bg-orange-50 p-4 rounded-md border border-orange-200">
                 <strong className="text-orange-800 text-sm flex items-center gap-2 mb-2">
-                    <Zap size={16} /> Stuck on Billing Error (OR_BAOOC_03)?
+                    <Zap size={16} /> Gemini API Config
                 </strong>
                 <p className="text-xs text-orange-800 mb-2">
-                    If Google Payments is locking you out, <strong>do not wait</strong>.
+                    Get a free API Key from <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.
                 </p>
-                <ol className="text-xs text-orange-800 list-decimal list-inside space-y-1 font-medium">
-                    <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Google AI Studio</a>.</li>
-                    <li>Click the <strong>Project Dropdown</strong> (top left).</li>
-                    <li>Select <strong>"New Project"</strong>.</li>
-                    <li>Click <strong>"Create API Key"</strong> in this new project.</li>
-                    <li>Paste that new key below. It works immediately on the Free Tier!</li>
-                </ol>
             </div>
           
             {/* Step 1: API Key */}
             <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
                 <strong className="text-blue-800 text-sm flex items-center gap-2 mb-2">
-                    <Key size={16} /> 1. AI API Key (Gemini)
+                    <Key size={16} /> 1. AI API Key (Required)
                 </strong>
-                <p className="text-xs text-blue-700 mb-3">
-                   Paste your API Key here to enable the Chatbot.
-                </p>
                 
                 <div className="flex gap-2 mb-3">
                     <input 
@@ -90,17 +84,32 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                         placeholder="Paste your AIza... key here"
                         className="flex-1 px-3 py-2 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <button 
-                        onClick={handleSave}
-                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition flex items-center gap-1"
-                    >
-                        {showSuccess ? <CheckCheck size={16}/> : <Save size={16}/>}
-                        {showSuccess ? "Saved!" : "Save"}
-                    </button>
                 </div>
+            </div>
 
-                {/* Lite Model Toggle */}
-                <div className="flex items-start gap-3 bg-white p-3 rounded border border-blue-100">
+             {/* Step 2: Business WhatsApp Number */}
+             <div className="bg-green-50 p-4 rounded-md border border-green-200">
+                <strong className="text-green-800 text-sm flex items-center gap-2 mb-2">
+                    <MessageCircle size={16} /> 2. Business WhatsApp Number
+                </strong>
+                <p className="text-xs text-green-700 mb-2">
+                    Where should appointment confirmations be sent? (Enter format like 233555XXXXXX)
+                </p>
+                <div className="flex gap-2 mb-3">
+                    <input 
+                        type="text" 
+                        value={businessNumber}
+                        onChange={(e) => setBusinessNumber(e.target.value)}
+                        placeholder="e.g. 233541234567"
+                        className="flex-1 px-3 py-2 text-sm border border-green-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                </div>
+            </div>
+
+            {/* Model & Save */}
+            <div className="flex flex-col gap-4">
+                 {/* Lite Model Toggle */}
+                <div className="flex items-start gap-3 bg-white p-3 rounded border border-gray-200">
                     <input 
                         type="checkbox" 
                         id="liteModel" 
@@ -113,52 +122,18 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                             <Gauge size={16} className="text-purple-600"/> 
                             Use 'Lite' Model (Recommended)
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                            Highly recommended for Free Tier. Switches to <code>gemini-flash-lite</code> which is faster and prevents "High Traffic" errors.
-                        </p>
                     </label>
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-600 underline font-bold flex items-center gap-1 hover:text-blue-800">
-                        <Key size={12}/> Get a key here
-                    </a>
-                    <span className="text-gray-300 hidden sm:inline">|</span>
-                    <a href="https://aistudio.google.com/app/plan_information" target="_blank" className="text-purple-600 underline font-bold flex items-center gap-1 hover:text-purple-800">
-                        <CreditCard size={12}/> Setup Billing
-                    </a>
-                </div>
+                <button 
+                    onClick={handleSave}
+                    className="w-full bg-[#075E54] text-white px-4 py-3 rounded-lg text-sm font-semibold hover:bg-[#064c44] transition flex items-center justify-center gap-2"
+                >
+                    {showSuccess ? <CheckCheck size={18}/> : <Save size={18}/>}
+                    {showSuccess ? "Settings Saved!" : "Save Settings"}
+                </button>
             </div>
 
-            {/* Step 2: Email Setup Info */}
-            <div className="bg-green-50 p-4 rounded-md border border-green-200">
-                <strong className="text-green-800 text-sm flex items-center gap-2 mb-1">
-                    <Mail size={16} /> 2. Email Configuration
-                </strong>
-                <p className="text-xs text-green-700 mb-2">
-                    To send real emails, you must set these <strong>Environment Variables</strong> in Render:
-                </p>
-                <ul className="text-xs text-green-700 list-disc list-inside space-y-2">
-                    <li><strong>SMTP_USER:</strong> <code>jabconcept3@gmail.com</code></li>
-                    <li><strong>SMTP_PASS:</strong> 
-                        <span className="bg-green-100 px-1 rounded border border-green-300">Requires App Password!</span>
-                        <br/>
-                        <span className="text-[10px] ml-4">
-                           (Go to Google Account → Security → 2-Step Verification → App Passwords)
-                        </span>
-                    </li>
-                </ul>
-            </div>
-
-            {/* Step 3: Webhook Info */}
-            <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200 opacity-80">
-                <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
-                    <Server size={16} /> 3. WhatsApp Webhook
-                </strong>
-                <ul className="text-xs text-yellow-700 list-disc list-inside space-y-1">
-                    <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
-                </ul>
-            </div>
           </div>
         </div>
       </div>

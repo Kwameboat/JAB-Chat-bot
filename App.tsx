@@ -9,17 +9,15 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [typingStatus, setTypingStatus] = useState<string>(''); // New state for detailed status
+  const [typingStatus, setTypingStatus] = useState<string>(''); 
   const [hasStarted, setHasStarted] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // Check for key availability immediately
   const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === '__GENAI_API_KEY__';
 
-  // Auto-scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -29,15 +27,12 @@ function App() {
   }, [messages, isTyping, typingStatus]);
 
   useEffect(() => {
-    // Initialize Gemini when app loads
     initializeChat();
     
-    // Auto-open modal if key is missing so user knows what to do
     if (isApiKeyMissing) {
         setIsConnectModalOpen(true);
     }
 
-    // Initial welcome message trigger (simulate slight delay for realism)
     const timer = setTimeout(() => {
         handleInitialWelcome();
     }, 1000);
@@ -48,7 +43,6 @@ function App() {
   const handleInitialWelcome = async () => {
       setIsTyping(true);
       try {
-          // We ask Gemini to generate the welcome message based on the system instruction
           const welcomeText = await sendMessageToGemini("Hello, I just clicked your Facebook ad.");
           addBotMessage(welcomeText);
       } catch (e) {
@@ -59,60 +53,20 @@ function App() {
       }
   };
 
-  const triggerEmail = async (emailContent: string, msgId: string) => {
-    try {
-        // Extract Subject
-        const subjectMatch = emailContent.match(/Subject: (.*)/);
-        const subject = subjectMatch ? subjectMatch[1] : "New Digital Hub Appointment";
-
-        const response = await fetch('/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                to: 'jabconcept3@gmail.com',
-                subject: subject,
-                text: emailContent
-            })
-        });
-        
-        const data = await response.json();
-        
-        // Determine status based on response
-        let newStatus: 'sent' | 'failed' | 'simulated' = 'failed';
-        if (data.simulated) {
-            newStatus = 'simulated';
-        } else if (data.success) {
-            newStatus = 'sent';
-        }
-
-        // Update UI to show success in the message object (needs type extension if strictly typed, forcing here for demo)
-        setMessages(prev => prev.map(m => 
-            m.id === msgId ? { ...m, emailStatus: newStatus } : m
-        ));
-    } catch (e) {
-        console.error("Email trigger failed:", e);
-        setMessages(prev => prev.map(m => 
-            m.id === msgId ? { ...m, emailStatus: 'failed' } : m
-        ));
-    }
-  };
-
   const addBotMessage = (rawText: string) => {
-    // Check for email summary tags
-    const emailStartTag = "EMAIL_SUMMARY_START";
-    const emailEndTag = "EMAIL_SUMMARY_END";
+    // UPDATED TAGS for Appointment Summary
+    const startTag = "APPOINTMENT_SUMMARY_START";
+    const endTag = "APPOINTMENT_SUMMARY_END";
     
     let processedMessages: Message[] = [];
     
-    if (rawText.includes(emailStartTag) && rawText.includes(emailEndTag)) {
-        // Extract email part
-        const parts = rawText.split(emailStartTag);
+    if (rawText.includes(startTag) && rawText.includes(endTag)) {
+        const parts = rawText.split(startTag);
         const preText = parts[0].trim();
-        const rest = parts[1].split(emailEndTag);
-        const emailContent = rest[0].trim();
+        const rest = parts[1].split(endTag);
+        const summaryContent = rest[0].trim();
         const postText = rest[1]?.trim();
 
-        // Add pre-text if exists
         if (preText) {
             processedMessages.push({
                 id: Date.now().toString() + '-pre',
@@ -122,20 +76,16 @@ function App() {
             });
         }
 
-        // Add Email Card
-        const emailMsgId = Date.now().toString() + '-email';
+        // Add Summary Card (We repurpose isEmailSummary flag for the UI)
         processedMessages.push({
-            id: emailMsgId,
-            text: emailContent,
+            id: Date.now().toString() + '-summary',
+            text: summaryContent,
             sender: Sender.BOT,
             timestamp: new Date(),
-            isEmailSummary: true
+            isEmailSummary: true, // This triggers the WhatsApp card in ChatMessage
+            emailStatus: 'sent'   // No longer used, but keeps TS happy if strict
         });
 
-        // Trigger real email
-        triggerEmail(emailContent, emailMsgId);
-
-        // Add post-text if exists
         if (postText) {
             processedMessages.push({
                 id: Date.now().toString() + '-post',
@@ -153,7 +103,6 @@ function App() {
         });
     }
 
-    // Add all processed messages with slight delays for effect if multiple
     processedMessages.forEach((msg, index) => {
         setTimeout(() => {
             setMessages(prev => [...prev, msg]);
@@ -174,10 +123,9 @@ function App() {
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
     setIsTyping(true);
-    setTypingStatus(''); // Clear status
+    setTypingStatus(''); 
 
     try {
-      // Pass the callback to update status text during long waits
       const response = await sendMessageToGemini(inputText, (status) => {
         setTypingStatus(status);
       });
@@ -192,7 +140,6 @@ function App() {
       let errorMessage = "Connection error. Please try again.";
       const errorStr = error.toString();
       
-      // Fallback error parsing if retries also failed
       if (errorStr.includes("429") || errorStr.includes("RESOURCE_EXHAUSTED")) {
          errorMessage = "⚠️ High Traffic: Maximum retries exceeded. Please try again in 1 minute.";
       } else {
@@ -230,13 +177,10 @@ function App() {
         onClose={() => setIsConnectModalOpen(false)} 
       />
 
-      {/* Mobile-first Container (Phone size on desktop, full on mobile) */}
       <div className="w-full h-screen sm:h-[85vh] sm:w-[400px] bg-[#e5ddd5] sm:rounded-[30px] shadow-2xl overflow-hidden flex flex-col relative border border-gray-300">
         
-        {/* Top Bar (WhatsApp Style) */}
         <div className="bg-[#075E54] p-3 text-white flex items-center justify-between z-10 shadow-sm shrink-0">
           <div className="flex items-center gap-3">
-            {/* Avatar */}
             <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden">
                 <img src="https://picsum.photos/200/200" alt="Consultant" className="w-full h-full object-cover" />
             </div>
@@ -246,30 +190,24 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-4 text-white/90">
-             {/* Connect Button */}
              <button 
                onClick={() => setIsConnectModalOpen(true)}
                className={`hover:bg-white/10 p-1.5 rounded-full transition-colors flex items-center gap-1 ${isApiKeyMissing ? 'bg-white/20 animate-pulse text-yellow-300' : ''}`}
-               title="Connect to AuthKey"
+               title="Settings"
              >
                 <Link2 size={20} />
                 {isApiKeyMissing && <span className="text-[10px] font-bold">SETUP</span>}
              </button>
-            <Video size={20} className="cursor-pointer hover:text-white hidden sm:block" />
-            <Phone size={20} className="cursor-pointer hover:text-white hidden sm:block" />
             <MoreVertical size={20} className="cursor-pointer hover:text-white" />
           </div>
         </div>
 
-        {/* Chat Area */}
         <div className="flex-1 overflow-y-auto p-4 bg-whatsapp-pattern relative">
           
-          {/* Messages */}
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
 
-          {/* Typing Indicator & Status */}
           {isTyping && (
             <div className="flex w-full mb-3 justify-start animate-fade-in">
                <div className="flex flex-col gap-1">
@@ -288,15 +226,7 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
         <div className="bg-[#F0F0F0] p-2 flex items-center gap-2 shrink-0">
-          <div className="flex items-center justify-center w-10 h-10 text-gray-500 cursor-pointer hover:text-gray-700">
-            <Smile size={24} />
-          </div>
-           <div className="flex items-center justify-center w-8 h-10 text-gray-500 cursor-pointer hover:text-gray-700">
-            <Paperclip size={24} />
-          </div>
-          
           <div className="flex-1 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200">
             <input
               ref={inputRef}
@@ -320,8 +250,7 @@ function App() {
             <Send size={18} className={inputText.trim() ? 'ml-1' : ''} />
           </button>
         </div>
-
-        {/* iPhone Bottom Bar Simulation (if needed for look) */}
+        
         <div className="h-1 bg-[#F0F0F0] w-full"></div>
       </div>
     </div>
