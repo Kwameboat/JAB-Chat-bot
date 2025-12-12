@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save } from 'lucide-react';
+import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save, CreditCard, AlertTriangle, ExternalLink } from 'lucide-react';
 import { SYSTEM_INSTRUCTION } from '../services/geminiService';
 
 interface ConnectModalProps {
@@ -71,8 +71,18 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                         {showSuccess ? "Saved!" : "Save"}
                     </button>
                 </div>
-                <div className="mt-2 text-[10px] text-blue-600">
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Get a key here</a>.
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-600 underline font-bold flex items-center gap-1 hover:text-blue-800">
+                        <Key size={12}/> Get a key here
+                    </a>
+                    <span className="text-gray-300 hidden sm:inline">|</span>
+                    <a href="https://aistudio.google.com/app/plan_information" target="_blank" className="text-purple-600 underline font-bold flex items-center gap-1 hover:text-purple-800">
+                        <CreditCard size={12}/> Setup Billing (Fix Rate Limits)
+                    </a>
+                    <span className="text-gray-300 hidden sm:inline">|</span>
+                    <a href="https://payments.google.com/" target="_blank" className="text-red-500 underline font-bold flex items-center gap-1 hover:text-red-700" title="Resolve OR_BAOOC errors">
+                        <AlertTriangle size={12}/> Fix Payment Errors
+                    </a>
                 </div>
             </div>
 
