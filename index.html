@@ -59,7 +59,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap } from 'lucide-react';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge } from 'lucide-react';
       import { GoogleGenAI } from '@google/genai';
 
       // --- TYPES & CONSTANTS ---
@@ -124,24 +124,35 @@ Our company email is: jabconcept3@gmail.com
       // --- SERVICES ---
       let chatSession = null;
       let genAI = null;
+      let currentModelName = '';
 
-      const initializeChat = () => {
+      const initializeChat = (forceLite = false) => {
         const apiKey = getEffectiveApiKey();
         
         if (!apiKey) {
           console.warn("API_KEY is missing.");
           return false;
         }
+
+        // Logic: Default to Lite unless explicitly disabled
+        const storedPref = localStorage.getItem('gemini_use_lite');
+        let useLite = true; 
+        if (storedPref === 'false') useLite = false;
+        if (forceLite) useLite = true;
+
+        const modelName = useLite ? 'gemini-flash-lite-latest' : 'gemini-2.5-flash';
+        currentModelName = modelName;
+
         try {
             genAI = new GoogleGenAI({ apiKey: apiKey });
             chatSession = genAI.chats.create({
-            model: 'gemini-2.5-flash',
+            model: modelName,
             config: {
                 systemInstruction: SYSTEM_INSTRUCTION,
                 temperature: 0.7,
             }
             });
-            console.log("Chat initialized successfully.");
+            console.log(`Chat initialized with model: ${modelName}`);
             return true;
         } catch (err) {
             console.error("Failed to init chat:", err);
@@ -169,16 +180,32 @@ Our company email is: jabconcept3@gmail.com
                 const errStr = error.toString();
                 const errMsg = error.message || errStr;
                 
-                // Check for 429
-                if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429")) {
+                // Check for 429 (Quota Exceeded) or 503
+                if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED") || errMsg.includes("429") || errStr.includes("503")) {
+                    
+                    // AUTO-FALLBACK: Switch to Lite if on standard
+                    if (currentModelName !== 'gemini-flash-lite-latest') {
+                        const fallbackMsg = "⚠️ High traffic. Switching to Lite model...";
+                        console.warn(fallbackMsg);
+                        if (onStatusUpdate) onStatusUpdate(fallbackMsg);
+                        
+                        // Force Lite and Save
+                        initializeChat(true);
+                        localStorage.setItem('gemini_use_lite', 'true');
+                        
+                        attempt = 0; 
+                        await delayPromise(1000);
+                        continue; 
+                    }
+
                     attempt++;
                     if (attempt > MAX_RETRIES) throw error;
 
                     const match = errMsg.match(/retry in (\d+(\.\d+)?)s/);
-                    const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 30;
+                    const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 5;
                     const safeWait = waitSeconds + 1;
 
-                    const statusMsg = `⏳ High traffic. Waiting ${safeWait}s for next slot...`;
+                    const statusMsg = `⏳ High traffic. Waiting ${safeWait}s...`;
                     console.warn(statusMsg);
                     
                     if (onStatusUpdate) {
@@ -187,7 +214,7 @@ Our company email is: jabconcept3@gmail.com
 
                     await delayPromise(safeWait * 1000);
                     
-                    if (onStatusUpdate) onStatusUpdate("Retrying now...");
+                    if (onStatusUpdate) onStatusUpdate("Retrying...");
                     continue;
                 }
                 throw error;
@@ -265,6 +292,9 @@ Our company email is: jabconcept3@gmail.com
       // ConnectModal Component
       const ConnectModal = ({ isOpen, onClose }) => {
         const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
+        const storedLitePref = localStorage.getItem('gemini_use_lite');
+        const initialLiteState = storedLitePref === 'false' ? false : true; 
+        const [useLite, setUseLite] = useState(initialLiteState);
         const [showSuccess, setShowSuccess] = useState(false);
 
         const handleSave = () => {
@@ -273,10 +303,12 @@ Our company email is: jabconcept3@gmail.com
             } else {
                 localStorage.removeItem('gemini_api_key');
             }
+            localStorage.setItem('gemini_use_lite', String(useLite));
+
             setShowSuccess(true);
             setTimeout(() => {
                 setShowSuccess(false);
-                window.location.reload(); // Reload to pick up new key
+                window.location.reload(); 
             }, 1000);
         };
 
@@ -322,7 +354,7 @@ Our company email is: jabconcept3@gmail.com
                            Paste your API Key here to enable the Chatbot.
                         </p>
                         
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 mb-3">
                             <input 
                                 type="password" 
                                 value={manualKey}
@@ -338,6 +370,27 @@ Our company email is: jabconcept3@gmail.com
                                 {showSuccess ? "Saved!" : "Save"}
                             </button>
                         </div>
+                        
+                        {/* Lite Model Toggle */}
+                        <div className="flex items-start gap-3 bg-white p-3 rounded border border-blue-100">
+                            <input 
+                                type="checkbox" 
+                                id="liteModel" 
+                                checked={useLite} 
+                                onChange={(e) => setUseLite(e.target.checked)}
+                                className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                            />
+                            <label htmlFor="liteModel" className="cursor-pointer select-none">
+                                <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+                                    <Gauge size={16} className="text-purple-600"/> 
+                                    Use 'Lite' Model (Recommended)
+                                </div>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    Highly recommended for Free Tier. Switches to <code>gemini-flash-lite</code> which is faster and prevents "High Traffic" errors.
+                                </p>
+                            </label>
+                        </div>
+
                         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
                             <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-600 underline font-bold flex items-center gap-1 hover:text-blue-800">
                                 <Key size={12}/> Get a key here

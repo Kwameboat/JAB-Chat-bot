@@ -58,10 +58,9 @@ export const initializeChat = (forceLite = false) => {
   const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
 
   // LOGIC CHANGE: Default to Lite model unless explicitly set to 'false' in localStorage.
-  // This prevents High Traffic errors for new users by default.
   const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('gemini_use_lite') : null;
   
-  let useLite = true; // Default to true for stability
+  let useLite = true; 
   if (storedPref === 'false') useLite = false;
   if (forceLite) useLite = true;
 
@@ -114,30 +113,30 @@ export const sendMessageToGemini = async (message: string, onStatusUpdate?: (sta
         
         // AUTO-FALLBACK: If we hit a limit on Standard, switch to Lite immediately
         if (currentModelName !== 'gemini-flash-lite-latest') {
-            const fallbackMsg = "⚠️ High traffic on Standard model. Switching to Lite model...";
+            const fallbackMsg = "⚠️ High traffic. Switching to Lite model...";
             console.warn(fallbackMsg);
             if (onStatusUpdate) onStatusUpdate(fallbackMsg);
             
             // Re-initialize with Lite forced
             initializeChat(true);
             
-            // Save this preference so next time it starts with Lite
+            // Save this preference
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('gemini_use_lite', 'true');
             }
 
             attempt = 0; // Reset attempts for the new model
-            await delayPromise(1000); // Small pause
-            continue; // Retry immediately with new model
+            await delayPromise(1000); 
+            continue; // Retry immediately
         }
 
         attempt++;
-        if (attempt > MAX_RETRIES) throw error; // Give up after max retries
+        if (attempt > MAX_RETRIES) throw error; 
 
-        // Extract wait time from error message, default to 5s if not found
+        // Extract wait time
         const match = errMsg.match(/retry in (\d+(\.\d+)?)s/);
         const waitSeconds = match ? Math.ceil(parseFloat(match[1])) : 5;
-        const safeWait = waitSeconds + 1; // Add 1s buffer
+        const safeWait = waitSeconds + 1; 
 
         const statusMsg = `⏳ High traffic. Waiting ${safeWait}s...`;
         console.warn(statusMsg);
@@ -146,15 +145,14 @@ export const sendMessageToGemini = async (message: string, onStatusUpdate?: (sta
             onStatusUpdate(statusMsg);
         }
 
-        // Wait before retrying
         await delayPromise(safeWait * 1000);
         
         if (onStatusUpdate) onStatusUpdate("Retrying...");
-        continue; // Retry loop
+        continue; 
       }
 
       console.error("Gemini API Error:", error);
-      throw error; // Throw other errors immediately
+      throw error; 
     }
   }
   
