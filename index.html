@@ -11,7 +11,6 @@
     
     <script>
       // Polyfill for process.env (Server injects the key here)
-      // We use a specific placeholder __GENAI_API_KEY__ that server.js will replace
       window.process = window.process || { env: { API_KEY: '__GENAI_API_KEY__' } };
     </script>
     
@@ -55,11 +54,11 @@
   <body>
     <div id="root"></div>
 
-    <!-- MAIN APPLICATION SCRIPT (INLINED FOR PREVIEW STABILITY) -->
+    <!-- MAIN APPLICATION SCRIPT -->
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key } from 'lucide-react';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save } from 'lucide-react';
       import { GoogleGenAI } from '@google/genai';
 
       // --- TYPES & CONSTANTS ---
@@ -108,15 +107,28 @@ Our company email is: boatengkwm@yahoo.com
    - After the block, tell the user the appointment is booked and give a warm next step.
 `;
 
+      // --- HELPER: Get Effective API Key ---
+      const getEffectiveApiKey = () => {
+        // 1. Try Local Storage (Manual Override)
+        const localKey = localStorage.getItem('gemini_api_key');
+        if (localKey && localKey.trim().length > 0) return localKey;
+
+        // 2. Try Server Env Injection
+        const envKey = process.env.API_KEY;
+        if (envKey && envKey !== '__GENAI_API_KEY__' && envKey.trim().length > 0) return envKey;
+
+        return null;
+      };
+
       // --- SERVICES ---
       let chatSession = null;
       let genAI = null;
 
       const initializeChat = () => {
-        const apiKey = process.env.API_KEY;
-        // Check if key is missing or is still the placeholder
-        if (!apiKey || apiKey === '__GENAI_API_KEY__') {
-          console.warn("API_KEY is missing or not replaced by server.");
+        const apiKey = getEffectiveApiKey();
+        
+        if (!apiKey) {
+          console.warn("API_KEY is missing.");
           return false;
         }
         try {
@@ -128,6 +140,7 @@ Our company email is: boatengkwm@yahoo.com
                 temperature: 0.7,
             }
             });
+            console.log("Chat initialized successfully.");
             return true;
         } catch (err) {
             console.error("Failed to init chat:", err);
@@ -146,7 +159,7 @@ Our company email is: boatengkwm@yahoo.com
             const result = await chatSession.sendMessage({ message });
             return result.text;
         } catch (e) {
-            console.error(e);
+            console.error("Gemini Request Error:", e);
             throw e;
         }
       };
@@ -163,7 +176,7 @@ Our company email is: boatengkwm@yahoo.com
         if (isError) {
              return (
                 <div className="flex justify-center my-2 w-full px-4 animate-fade-in">
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 shadow-sm max-w-sm">
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 shadow-sm max-w-sm break-words">
                         <AlertTriangle size={18} className="mt-0.5 shrink-0" />
                         <div>{message.text}</div>
                     </div>
@@ -205,56 +218,79 @@ Our company email is: boatengkwm@yahoo.com
 
       // ConnectModal Component
       const ConnectModal = ({ isOpen, onClose }) => {
+        const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
+        const [showSuccess, setShowSuccess] = useState(false);
+
+        const handleSave = () => {
+            if (manualKey.trim()) {
+                localStorage.setItem('gemini_api_key', manualKey.trim());
+            } else {
+                localStorage.removeItem('gemini_api_key');
+            }
+            setShowSuccess(true);
+            setTimeout(() => {
+                setShowSuccess(false);
+                window.location.reload(); // Reload to pick up new key
+            }, 1000);
+        };
+
         if (!isOpen) return null;
+        
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
                 <div className="bg-[#075E54] p-4 flex justify-between items-center text-white shrink-0">
                 <div className="flex items-center gap-2">
                     <Server size={20} />
-                    <h2 className="text-lg font-semibold">Connect to AuthKey & WhatsApp</h2>
+                    <h2 className="text-lg font-semibold">Connect & Setup</h2>
                 </div>
                 <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full transition"><X size={20} /></button>
                 </div>
                 <div className="p-6 overflow-y-auto">
-                <p className="text-gray-600 mb-6 text-sm">The backend logic handles real WhatsApp webhooks.</p>
                 
-                <div className="space-y-4">
+                <div className="space-y-6">
                 
-                    {/* Step 1: API Key */}
+                    {/* Step 1: Manual Key Override */}
                     <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
                         <strong className="text-blue-800 text-sm flex items-center gap-2 mb-2">
-                            <Key size={16} /> 1. Get Gemini API Key
+                            <Key size={16} /> API Key Setup (Manual Override)
                         </strong>
-                        <p className="text-sm text-blue-700 mb-2">
-                           You need a Google Gemini API Key for the chatbot to work.
+                        <p className="text-xs text-blue-700 mb-3">
+                           If the server connection isn't working, paste your API Key here directly to force it to work.
                         </p>
-                        <a 
-                            href="https://aistudio.google.com/app/apikey" 
-                            target="_blank" 
-                            className="inline-block bg-blue-600 text-white text-xs px-3 py-2 rounded hover:bg-blue-700 transition"
-                        >
-                            Generate Key at Google AI Studio
-                        </a>
-                        <div className="mt-2 text-xs text-blue-800">
-                            Then add it to Render: <strong>Environment</strong> -> <strong>Add Environment Variable</strong> -> Key: <code>API_KEY</code>
+                        
+                        <div className="flex gap-2">
+                            <input 
+                                type="password" 
+                                value={manualKey}
+                                onChange={(e) => setManualKey(e.target.value)}
+                                placeholder="Paste your AIza... key here"
+                                className="flex-1 px-3 py-2 text-sm border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button 
+                                onClick={handleSave}
+                                className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 transition flex items-center gap-1"
+                            >
+                                {showSuccess ? <CheckCheck size={16}/> : <Save size={16}/>}
+                                {showSuccess ? "Saved!" : "Save"}
+                            </button>
+                        </div>
+                        <div className="mt-2 text-[10px] text-blue-600">
+                            Key is saved securely in your browser's local storage.
+                            <br/>
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="underline font-bold">Get a key here</a> if you don't have one.
                         </div>
                     </div>
 
-                    {/* Step 2: Webhook */}
-                    <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200">
+                    {/* Step 2: Webhook Info */}
+                    <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200 opacity-80">
                         <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
-                            <Server size={16} /> 2. Webhook Configuration
+                            <Server size={16} /> Webhook Configuration (For WhatsApp)
                         </strong>
-                        <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+                        <ul className="text-xs text-yellow-700 list-disc list-inside space-y-1">
                             <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
                             <li><strong>Method:</strong> <code>POST</code></li>
-                            <li><strong>Format:</strong> <code>JSON</code></li>
                         </ul>
-                    </div>
-
-                    <div className="bg-gray-100 p-4 rounded text-sm text-gray-700">
-                        Please refer to <strong>server.js</strong> for the full backend implementation used for deployment.
                     </div>
                 </div>
                 </div>
@@ -272,8 +308,9 @@ Our company email is: boatengkwm@yahoo.com
         const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
         const messagesEndRef = useRef(null);
         
-        // Check for key availability immediately
-        const isApiKeyMissing = !process.env.API_KEY || process.env.API_KEY === '__GENAI_API_KEY__';
+        // Check availability
+        const effectiveKey = getEffectiveApiKey();
+        const isApiKeyMissing = !effectiveKey;
 
         const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         
@@ -282,7 +319,7 @@ Our company email is: boatengkwm@yahoo.com
         useEffect(() => {
             initializeChat();
             
-            // Auto-open modal if key is missing so user knows what to do
+            // Auto-open modal if absolutely no key found
             if (isApiKeyMissing) {
                 setIsConnectModalOpen(true);
             }
@@ -299,11 +336,13 @@ Our company email is: boatengkwm@yahoo.com
                 if (e.message === "API_KEY_MISSING") {
                     setMessages(prev => [...prev, { 
                         id: Date.now(), 
-                        text: "Setup Required: Please set the API_KEY environment variable in your Render dashboard settings to enable the AI.", 
+                        text: "Welcome! To get started, please click the 'Link/Connect' icon above and paste your API Key.", 
                         sender: Sender.ERROR, 
                         timestamp: new Date() 
                     }]);
                 } else {
+                    // Fallback welcome message if API fails but key exists (e.g. network)
+                    console.error("Welcome message failed:", e);
                     addBotMessage("Hi there! Welcome to our Digital Hub. I'm here to help you get started. What is your name?");
                 }
             } finally {
@@ -317,7 +356,7 @@ Our company email is: boatengkwm@yahoo.com
             const emailEndTag = "EMAIL_SUMMARY_END";
             let processedMessages = [];
             
-            if (rawText.includes(emailStartTag) && rawText.includes(emailEndTag)) {
+            if (rawText && rawText.includes(emailStartTag) && rawText.includes(emailEndTag)) {
                 const parts = rawText.split(emailStartTag);
                 const preText = parts[0].trim();
                 const rest = parts[1].split(emailEndTag);
@@ -328,7 +367,7 @@ Our company email is: boatengkwm@yahoo.com
                 processedMessages.push({ id: Date.now() + '-email', text: emailContent, sender: Sender.BOT, timestamp: new Date(), isEmailSummary: true });
                 if (postText) processedMessages.push({ id: Date.now() + '-post', text: postText, sender: Sender.BOT, timestamp: new Date() });
             } else {
-                processedMessages.push({ id: Date.now(), text: rawText, sender: Sender.BOT, timestamp: new Date() });
+                processedMessages.push({ id: Date.now(), text: rawText || "...", sender: Sender.BOT, timestamp: new Date() });
             }
 
             processedMessages.forEach((msg, index) => {
@@ -352,13 +391,16 @@ Our company email is: boatengkwm@yahoo.com
                 let errorMessage = "Connection error. Please try again.";
                 
                 if (error.message === 'API_KEY_MISSING') {
-                    errorMessage = "System Error: API_KEY environment variable is missing in Render.";
+                    errorMessage = "Setup Required: Click the Link icon above to set your API Key.";
+                    setIsConnectModalOpen(true);
+                } else {
+                     errorMessage = `Error: ${error.message || "Unknown error"}. Check your API Key or Network.`;
                 }
                 
                 setMessages(prev => [...prev, { 
                     id: Date.now(), 
                     text: errorMessage, 
-                    sender: error.message === 'API_KEY_MISSING' ? Sender.ERROR : Sender.BOT, 
+                    sender: Sender.ERROR, 
                     timestamp: new Date() 
                 }]);
             }
@@ -379,11 +421,10 @@ Our company email is: boatengkwm@yahoo.com
                             </div>
                         </div>
                         <div className="flex items-center gap-4 text-white/90">
-                            {/* Highlighting the button if key is missing */}
                             <button 
                                 onClick={() => setIsConnectModalOpen(true)} 
                                 className={`hover:bg-white/10 p-1.5 rounded-full transition-colors flex items-center gap-1 ${isApiKeyMissing ? 'bg-white/20 animate-pulse text-yellow-300' : ''}`} 
-                                title="Connect"
+                                title="Connect & Setup"
                             >
                                 <Link2 size={20} />
                                 {isApiKeyMissing && <span className="text-[10px] font-bold">SETUP</span>}

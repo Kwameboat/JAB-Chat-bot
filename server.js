@@ -13,7 +13,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files (like css, images, or raw source if needed)
+// Serve static files
 app.use(express.static(__dirname));
 
 // Configuration
@@ -21,10 +21,12 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY;
 const COMPANY_EMAIL = 'boatengkwm@yahoo.com';
 
 if (!GEMINI_API_KEY) {
-    console.warn("⚠️ WARNING: API_KEY is missing in the environment variables!");
+    console.warn("⚠️  [Server] WARNING: API_KEY is missing in the environment variables!");
+} else {
+    console.log(`✅ [Server] API Key found (Length: ${GEMINI_API_KEY.length})`);
 }
 
-// System Instruction (Copied from frontend to ensure consistency)
+// System Instruction
 const SERVICES_LIST = [
   "Website Design",
   "Company Management Systems",
@@ -75,7 +77,6 @@ if (GEMINI_API_KEY) {
 }
 
 // --- FRONTEND ROUTE ---
-// Serves index.html with the API Key injected for the client-side demo
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, 'index.html');
     fs.readFile(indexPath, 'utf8', (err, data) => {
@@ -84,8 +85,10 @@ app.get('/', (req, res) => {
             return res.status(500).send('Error loading frontend');
         }
         
-        // Inject the API key into the client-side process polyfill using a unique placeholder
         const keyToInject = GEMINI_API_KEY || '';
+        
+        console.log(`[Request] Serving index.html. Injecting Key: ${keyToInject ? 'Yes' : 'No'}`);
+
         const injectedHtml = data.replace(
             '__GENAI_API_KEY__', 
             keyToInject
@@ -99,9 +102,6 @@ app.post('/webhook', async (req, res) => {
   try {
     console.log('Incoming Webhook Body:', JSON.stringify(req.body, null, 2));
 
-    // 1. Extract the user's message
-    // Note: Adjust this path based on your specific WhatsApp provider's payload structure
-    // Common structures: req.body.message.text, req.body.data.message, etc.
     const userMessage = req.body.message || req.body.text || (req.body.entry && req.body.entry[0].changes[0].value.messages[0].text.body);
 
     if (!userMessage) {
@@ -114,7 +114,6 @@ app.post('/webhook', async (req, res) => {
        return res.status(500).send('Server Config Error: API Key Missing');
     }
 
-    // 2. Generate AI Response
     const chat = aiClient.chats.create({
       model: 'gemini-2.5-flash',
       config: {
@@ -128,15 +127,6 @@ app.post('/webhook', async (req, res) => {
     
     console.log("🤖 AI Response Generated:", botResponse);
 
-    // 3. Send Response back to WhatsApp
-    // TODO: To make this work, you need to make a POST request to your AuthKey/WhatsApp API endpoint here.
-    // Example:
-    // await fetch('https://api.authkey.io/request...', {
-    //    method: 'POST',
-    //    body: JSON.stringify({ to: userPhone, text: botResponse })
-    // });
-    
-    // For now, we return the response in the HTTP reply (some webhooks support this)
     res.status(200).json({ reply: botResponse });
 
   } catch (error) {
