@@ -56,18 +56,23 @@ export const initializeChat = () => {
   // Safely check for process.env availability
   const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
 
+  // Check for User preference for Lite model (fixes high traffic)
+  const useLite = typeof localStorage !== 'undefined' && localStorage.getItem('gemini_use_lite') === 'true';
+  const modelName = useLite ? 'gemini-flash-lite-latest' : 'gemini-2.5-flash';
+
   if (!apiKey) {
     console.warn("API_KEY is missing. Chat will operate in fallback mode or fail.");
   } else {
     genAI = new GoogleGenAI({ apiKey: apiKey });
     
     chatSession = genAI.chats.create({
-      model: 'gemini-2.5-flash',
+      model: modelName,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.7,
       }
     });
+    console.log(`Chat initialized with model: ${modelName}`);
   }
 };
 

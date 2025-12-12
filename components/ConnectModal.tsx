@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save, CreditCard, AlertTriangle, ExternalLink, Zap } from 'lucide-react';
+import { X, Copy, Server, Check, Key, Mail, CheckCheck, Save, CreditCard, AlertTriangle, ExternalLink, Zap, Gauge } from 'lucide-react';
 import { SYSTEM_INSTRUCTION } from '../services/geminiService';
 
 interface ConnectModalProps {
@@ -9,6 +9,7 @@ interface ConnectModalProps {
 
 export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) => {
   const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [useLite, setUseLite] = useState(localStorage.getItem('gemini_use_lite') === 'true');
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSave = () => {
@@ -17,10 +18,14 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
     } else {
         localStorage.removeItem('gemini_api_key');
     }
+    
+    // Save model preference
+    localStorage.setItem('gemini_use_lite', String(useLite));
+
     setShowSuccess(true);
     setTimeout(() => {
         setShowSuccess(false);
-        window.location.reload(); // Reload to pick up new key
+        window.location.reload(); // Reload to pick up new key/settings
     }, 1000);
   };
 
@@ -72,7 +77,7 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                    Paste your API Key here to enable the Chatbot.
                 </p>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-2 mb-3">
                     <input 
                         type="password" 
                         value={manualKey}
@@ -88,6 +93,28 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                         {showSuccess ? "Saved!" : "Save"}
                     </button>
                 </div>
+
+                {/* Lite Model Toggle */}
+                <div className="flex items-start gap-3 bg-white p-3 rounded border border-blue-100">
+                    <input 
+                        type="checkbox" 
+                        id="liteModel" 
+                        checked={useLite} 
+                        onChange={(e) => setUseLite(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="liteModel" className="cursor-pointer select-none">
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-800">
+                            <Gauge size={16} className="text-purple-600"/> 
+                            Use 'Lite' Model (Fixes High Traffic)
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            Enable this if you are getting "429 Resource Exhausted" or "High Traffic" errors. 
+                            It uses <code>gemini-flash-lite</code> which is faster and has higher limits.
+                        </p>
+                    </label>
+                </div>
+
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
                     <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-600 underline font-bold flex items-center gap-1 hover:text-blue-800">
                         <Key size={12}/> Get a key here
