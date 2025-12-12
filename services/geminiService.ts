@@ -53,20 +53,23 @@ let chatSession: Chat | null = null;
 let genAI: GoogleGenAI | null = null;
 
 export const initializeChat = () => {
-  if (!process.env.API_KEY) {
-    console.error("API_KEY is missing");
-    return;
+  // Safely check for process.env availability
+  const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
+
+  if (!apiKey) {
+    console.warn("API_KEY is missing. Chat will operate in fallback mode or fail.");
+    // We don't return here so the app can still render, just the API calls will fail gracefully
+  } else {
+    genAI = new GoogleGenAI({ apiKey: apiKey });
+    
+    chatSession = genAI.chats.create({
+      model: 'gemini-2.5-flash',
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        temperature: 0.7, // Balance between creative and focused
+      }
+    });
   }
-  
-  genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  chatSession = genAI.chats.create({
-    model: 'gemini-2.5-flash',
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      temperature: 0.7, // Balance between creative and focused
-    }
-  });
 };
 
 export const sendMessageToGemini = async (message: string): Promise<string> => {
@@ -75,7 +78,8 @@ export const sendMessageToGemini = async (message: string): Promise<string> => {
   }
 
   if (!chatSession) {
-     throw new Error("Failed to initialize chat session");
+     // If still no session (e.g., no API Key), throw a specific error
+     throw new Error("Chat session not initialized (Check API Key)");
   }
 
   try {

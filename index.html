@@ -6,38 +6,338 @@
     <title>Digital Hub Chatbot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Babel Standalone for in-browser compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script>
+      // Polyfill for process.env (Server injects the key here)
+      window.process = window.process || { env: { API_KEY: '' } };
+    </script>
+    
     <style>
       body {
         font-family: 'Inter', sans-serif;
         background-color: #E5E5E5;
       }
-      /* Custom Scrollbar for Chat */
-      .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-      }
-      .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-      }
-      /* WhatsApp background pattern simulation */
+      .scrollbar-hide::-webkit-scrollbar { display: none; }
+      .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       .bg-whatsapp-pattern {
         background-color: #e5ddd5;
         background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M15 15h10v10H15V15zm0 40h10v10H15V55zm0 40h10v10H15V95zm40-80h10v10H55V15zm0 40h10v10H55V55zm0 40h10v10H55V95zm40-80h10v10H95V15zm0 40h10v10H95V55zm0 40h10v10H95V95z' fill='%23d1d7db' fill-opacity='0.2'/%3E%3C/svg%3E");
       }
+      .animate-fade-in {
+        animation: fadeIn 0.3s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
     </style>
-  <script type="importmap">
+    
+    <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+    "@google/genai": "https://esm.sh/@google/genai@0.0.12",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.33.0"
+    "express": "https://esm.sh/express@^5.2.1",
+    "url": "https://esm.sh/url@^0.11.4",
+    "path": "https://esm.sh/path@^0.12.7",
+    "fs": "https://esm.sh/fs@^0.0.1-security"
   }
 }
 </script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
+
+    <!-- MAIN APPLICATION SCRIPT (INLINED FOR PREVIEW STABILITY) -->
+    <script type="text/babel" data-type="module">
+      import React, { useState, useEffect, useRef } from 'react';
+      import ReactDOM from 'react-dom/client';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server } from 'lucide-react';
+      import { GoogleGenAI } from '@google/genai';
+
+      // --- TYPES & CONSTANTS ---
+      const Sender = { USER: 'user', BOT: 'bot' };
+      
+      const SERVICES_LIST = [
+        "Website Design",
+        "Company Management Systems",
+        "WhatsApp Chatbots",
+        "Social Media Marketing",
+        "Graphic Design",
+        "Branding",
+        "General Digital Solutions"
+      ];
+
+      const SYSTEM_INSTRUCTION = `
+You are a friendly, professional, and warm Digital Consultant for a "Digital Hub" company.
+Your goal is to guide a potential client from a Facebook Ad click to a booked appointment via a conversation.
+Our company email is: boatengkwm@yahoo.com
+
+**Your Personality:**
+- Warm, welcoming, and conversational.
+- Not robotic. Use emojis occasionally (👋, ✨, 🚀).
+- Do not overwhelm the user with long paragraphs. Keep messages concise (under 3-4 sentences usually).
+- Guide the user one step at a time.
+
+**The Process (Follow this strictly):**
+1. **Welcome & Name:** Warmly welcome them (assume they came from an ad). Ask for their name.
+2. **Service Selection:** Once they give their name, ask what they are looking for. Present the services naturally: ${SERVICES_LIST.join(", ")}.
+3. **Goal/Problem:** When they pick a service, ask a specific follow-up about their goal or the problem they want to solve.
+4. **Budget:** Gently ask about their budget. Invite them to share a specific amount or a range (Low, Medium, Premium).
+5. **Confirmation:** Summarize their Name, Service, Goal, and Budget. Ask them to confirm.
+6. **Booking & Email:**
+   - If they confirm, tell them you are booking the appointment.
+   - **CRITICAL:** You must generate a text block that looks like an email summary.
+   - Start this specific block with "EMAIL_SUMMARY_START" and end it with "EMAIL_SUMMARY_END".
+   - The content inside should be formatted like:
+     "To: boatengkwm@yahoo.com
+     Subject: New Appointment: [Service] - [Name]
+     
+     Name: [Name]
+     Service: [Service]
+     Goal: [Goal]
+     Budget: [Budget]
+     Status: Pending Appointment"
+   - After the block, tell the user the appointment is booked and give a warm next step.
+`;
+
+      // --- SERVICES ---
+      let chatSession = null;
+      let genAI = null;
+
+      const initializeChat = () => {
+        const apiKey = process.env.API_KEY;
+        if (!apiKey) {
+          console.warn("API_KEY is missing.");
+          return;
+        }
+        try {
+            genAI = new GoogleGenAI({ apiKey: apiKey });
+            chatSession = genAI.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION,
+                temperature: 0.7,
+            }
+            });
+        } catch (err) {
+            console.error("Failed to init chat:", err);
+        }
+      };
+
+      const sendMessageToGemini = async (message) => {
+        if (!chatSession) initializeChat();
+        if (!chatSession) throw new Error("Chat not initialized");
+        const result = await chatSession.sendMessage({ message });
+        return result.text;
+      };
+
+      // --- COMPONENTS ---
+
+      // ChatMessage Component
+      const ChatMessage = ({ message }) => {
+        const isUser = message.sender === Sender.USER;
+        const isEmail = message.isEmailSummary;
+        const formatTime = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (isEmail) {
+            return (
+            <div className="flex justify-center my-4 animate-fade-in px-4 w-full">
+                <div className="bg-white rounded-lg shadow-md border border-gray-200 w-full max-w-sm overflow-hidden">
+                <div className="bg-teal-600 text-white p-3 flex items-center gap-2">
+                    <Mail size={18} />
+                    <span className="font-medium text-sm">System Email Sent</span>
+                </div>
+                <div className="p-4 text-xs font-mono text-gray-700 whitespace-pre-wrap bg-gray-50">
+                    {message.text}
+                </div>
+                <div className="bg-gray-100 p-2 text-center text-xs text-green-600 font-semibold border-t border-gray-200">
+                    Sent to boatengkwm@yahoo.com ✓
+                </div>
+                </div>
+            </div>
+            );
+        }
+
+        return (
+            <div className={`flex w-full mb-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+            <div className={`relative max-w-[85%] sm:max-w-[70%] px-4 py-2 rounded-lg shadow-sm text-sm leading-relaxed ${isUser ? 'bg-[#dcf8c6] text-gray-900 rounded-tr-none' : 'bg-white text-gray-900 rounded-tl-none'}`}>
+                <div className="whitespace-pre-wrap">{message.text}</div>
+                <div className="flex justify-end items-center mt-1 space-x-1">
+                <span className="text-[10px] text-gray-500">{formatTime(message.timestamp)}</span>
+                {isUser && <CheckCheck size={14} className="text-blue-500" />}
+                </div>
+            </div>
+            </div>
+        );
+      };
+
+      // ConnectModal Component
+      const ConnectModal = ({ isOpen, onClose }) => {
+        if (!isOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="bg-[#075E54] p-4 flex justify-between items-center text-white shrink-0">
+                <div className="flex items-center gap-2">
+                    <Server size={20} />
+                    <h2 className="text-lg font-semibold">Connect to AuthKey & WhatsApp</h2>
+                </div>
+                <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full transition"><X size={20} /></button>
+                </div>
+                <div className="p-6 overflow-y-auto">
+                <p className="text-gray-600 mb-6 text-sm">The backend logic handles real WhatsApp webhooks.</p>
+                <div className="bg-gray-100 p-4 rounded text-sm text-gray-700">
+                    Please refer to <strong>server.js</strong> for the full backend implementation used for deployment.
+                </div>
+                </div>
+            </div>
+            </div>
+        );
+      };
+
+      // Main App Component
+      function App() {
+        const [messages, setMessages] = useState([]);
+        const [inputText, setInputText] = useState('');
+        const [isTyping, setIsTyping] = useState(false);
+        const [hasStarted, setHasStarted] = useState(false);
+        const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+        const messagesEndRef = useRef(null);
+        
+        const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        
+        useEffect(() => { scrollToBottom(); }, [messages, isTyping]);
+        
+        useEffect(() => {
+            initializeChat();
+            setTimeout(() => handleInitialWelcome(), 1000);
+        }, []);
+
+        const handleInitialWelcome = async () => {
+            setIsTyping(true);
+            try {
+                const welcomeText = await sendMessageToGemini("Hello, I just clicked your Facebook ad.");
+                addBotMessage(welcomeText);
+            } catch (e) {
+                console.error(e);
+                addBotMessage("Hi there! Welcome to our Digital Hub. I'm here to help you get started. What is your name?");
+            } finally {
+                setIsTyping(false);
+                setHasStarted(true);
+            }
+        };
+
+        const addBotMessage = (rawText) => {
+            const emailStartTag = "EMAIL_SUMMARY_START";
+            const emailEndTag = "EMAIL_SUMMARY_END";
+            let processedMessages = [];
+            
+            if (rawText.includes(emailStartTag) && rawText.includes(emailEndTag)) {
+                const parts = rawText.split(emailStartTag);
+                const preText = parts[0].trim();
+                const rest = parts[1].split(emailEndTag);
+                const emailContent = rest[0].trim();
+                const postText = rest[1]?.trim();
+
+                if (preText) processedMessages.push({ id: Date.now() + '-pre', text: preText, sender: Sender.BOT, timestamp: new Date() });
+                processedMessages.push({ id: Date.now() + '-email', text: emailContent, sender: Sender.BOT, timestamp: new Date(), isEmailSummary: true });
+                if (postText) processedMessages.push({ id: Date.now() + '-post', text: postText, sender: Sender.BOT, timestamp: new Date() });
+            } else {
+                processedMessages.push({ id: Date.now(), text: rawText, sender: Sender.BOT, timestamp: new Date() });
+            }
+
+            processedMessages.forEach((msg, index) => {
+                setTimeout(() => setMessages(prev => [...prev, msg]), index * 500);
+            });
+        };
+
+        const handleSendMessage = async () => {
+            if (!inputText.trim()) return;
+            const userMsg = { id: Date.now(), text: inputText, sender: Sender.USER, timestamp: new Date() };
+            setMessages(prev => [...prev, userMsg]);
+            setInputText('');
+            setIsTyping(true);
+            try {
+                const response = await sendMessageToGemini(inputText);
+                setIsTyping(false);
+                addBotMessage(response);
+            } catch (error) {
+                setIsTyping(false);
+                setMessages(prev => [...prev, { id: Date.now(), text: "Connection error. Please try again.", sender: Sender.BOT, timestamp: new Date() }]);
+            }
+        };
+
+        return (
+            <div className="flex justify-center items-center min-h-screen bg-gray-100">
+                <ConnectModal isOpen={isConnectModalOpen} onClose={() => setIsConnectModalOpen(false)} />
+                <div className="w-full h-screen sm:h-[85vh] sm:w-[400px] bg-[#e5ddd5] sm:rounded-[30px] shadow-2xl overflow-hidden flex flex-col relative border border-gray-300">
+                    <div className="bg-[#075E54] p-3 text-white flex items-center justify-between z-10 shadow-sm shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden">
+                                <img src="https://picsum.photos/200/200" alt="Consultant" className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="font-semibold text-base leading-tight">Digital Hub Consultant</span>
+                                <span className="text-xs text-gray-200">Online</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4 text-white/90">
+                            <button onClick={() => setIsConnectModalOpen(true)} className="hover:bg-white/10 p-1.5 rounded-full transition-colors flex items-center gap-1" title="Connect">
+                                <Link2 size={20} />
+                            </button>
+                            <MoreVertical size={20} className="cursor-pointer hover:text-white" />
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 bg-whatsapp-pattern relative">
+                        {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
+                        {isTyping && (
+                            <div className="flex w-full mb-3 justify-start">
+                                <div className="bg-white px-4 py-3 rounded-lg rounded-tl-none shadow-sm flex gap-1 items-center">
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className="bg-[#F0F0F0] p-2 flex items-center gap-2 shrink-0">
+                        <div className="flex-1 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200">
+                            <input
+                                type="text"
+                                value={inputText}
+                                onChange={(e) => setInputText(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                placeholder="Type a message"
+                                className="w-full outline-none text-gray-700 placeholder-gray-400 bg-transparent text-sm"
+                                disabled={!hasStarted}
+                            />
+                        </div>
+                        <button 
+                            onClick={handleSendMessage}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-sm ${inputText.trim() ? 'bg-[#075E54] text-white hover:bg-[#064c44]' : 'bg-gray-300 text-gray-500'}`}
+                            disabled={!inputText.trim()}
+                        >
+                            <Send size={18} className={inputText.trim() ? 'ml-1' : ''} />
+                        </button>
+                    </div>
+                    <div className="h-1 bg-[#F0F0F0] w-full"></div>
+                </div>
+            </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
   </body>
 </html>
