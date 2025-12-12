@@ -11,7 +11,8 @@
     
     <script>
       // Polyfill for process.env (Server injects the key here)
-      window.process = window.process || { env: { API_KEY: '' } };
+      // We use a specific placeholder __GENAI_API_KEY__ that server.js will replace
+      window.process = window.process || { env: { API_KEY: '__GENAI_API_KEY__' } };
     </script>
     
     <style>
@@ -58,11 +59,11 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server } from 'lucide-react';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key } from 'lucide-react';
       import { GoogleGenAI } from '@google/genai';
 
       // --- TYPES & CONSTANTS ---
-      const Sender = { USER: 'user', BOT: 'bot' };
+      const Sender = { USER: 'user', BOT: 'bot', ERROR: 'error' };
       
       const SERVICES_LIST = [
         "Website Design",
@@ -113,9 +114,10 @@ Our company email is: boatengkwm@yahoo.com
 
       const initializeChat = () => {
         const apiKey = process.env.API_KEY;
-        if (!apiKey) {
-          console.warn("API_KEY is missing.");
-          return;
+        // Check if key is missing or is still the placeholder
+        if (!apiKey || apiKey === '__GENAI_API_KEY__') {
+          console.warn("API_KEY is missing or not replaced by server.");
+          return false;
         }
         try {
             genAI = new GoogleGenAI({ apiKey: apiKey });
@@ -126,16 +128,27 @@ Our company email is: boatengkwm@yahoo.com
                 temperature: 0.7,
             }
             });
+            return true;
         } catch (err) {
             console.error("Failed to init chat:", err);
+            return false;
         }
       };
 
       const sendMessageToGemini = async (message) => {
-        if (!chatSession) initializeChat();
-        if (!chatSession) throw new Error("Chat not initialized");
-        const result = await chatSession.sendMessage({ message });
-        return result.text;
+        if (!chatSession) {
+            const success = initializeChat();
+            if (!success) throw new Error("API_KEY_MISSING");
+        }
+        if (!chatSession) throw new Error("CHAT_NOT_INITIALIZED");
+        
+        try {
+            const result = await chatSession.sendMessage({ message });
+            return result.text;
+        } catch (e) {
+            console.error(e);
+            throw e;
+        }
       };
 
       // --- COMPONENTS ---
@@ -143,8 +156,20 @@ Our company email is: boatengkwm@yahoo.com
       // ChatMessage Component
       const ChatMessage = ({ message }) => {
         const isUser = message.sender === Sender.USER;
+        const isError = message.sender === Sender.ERROR;
         const isEmail = message.isEmailSummary;
         const formatTime = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (isError) {
+             return (
+                <div className="flex justify-center my-2 w-full px-4 animate-fade-in">
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 shadow-sm max-w-sm">
+                        <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                        <div>{message.text}</div>
+                    </div>
+                </div>
+             );
+        }
 
         if (isEmail) {
             return (
@@ -193,8 +218,44 @@ Our company email is: boatengkwm@yahoo.com
                 </div>
                 <div className="p-6 overflow-y-auto">
                 <p className="text-gray-600 mb-6 text-sm">The backend logic handles real WhatsApp webhooks.</p>
-                <div className="bg-gray-100 p-4 rounded text-sm text-gray-700">
-                    Please refer to <strong>server.js</strong> for the full backend implementation used for deployment.
+                
+                <div className="space-y-4">
+                
+                    {/* Step 1: API Key */}
+                    <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
+                        <strong className="text-blue-800 text-sm flex items-center gap-2 mb-2">
+                            <Key size={16} /> 1. Get Gemini API Key
+                        </strong>
+                        <p className="text-sm text-blue-700 mb-2">
+                           You need a Google Gemini API Key for the chatbot to work.
+                        </p>
+                        <a 
+                            href="https://aistudio.google.com/app/apikey" 
+                            target="_blank" 
+                            className="inline-block bg-blue-600 text-white text-xs px-3 py-2 rounded hover:bg-blue-700 transition"
+                        >
+                            Generate Key at Google AI Studio
+                        </a>
+                        <div className="mt-2 text-xs text-blue-800">
+                            Then add it to Render: <strong>Environment</strong> -> <strong>Add Environment Variable</strong> -> Key: <code>API_KEY</code>
+                        </div>
+                    </div>
+
+                    {/* Step 2: Webhook */}
+                    <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200">
+                        <strong className="text-yellow-800 text-sm flex items-center gap-2 mb-1">
+                            <Server size={16} /> 2. Webhook Configuration
+                        </strong>
+                        <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+                            <li><strong>URL:</strong> <code>https://your-app-url.onrender.com/webhook</code></li>
+                            <li><strong>Method:</strong> <code>POST</code></li>
+                            <li><strong>Format:</strong> <code>JSON</code></li>
+                        </ul>
+                    </div>
+
+                    <div className="bg-gray-100 p-4 rounded text-sm text-gray-700">
+                        Please refer to <strong>server.js</strong> for the full backend implementation used for deployment.
+                    </div>
                 </div>
                 </div>
             </div>
@@ -226,8 +287,16 @@ Our company email is: boatengkwm@yahoo.com
                 const welcomeText = await sendMessageToGemini("Hello, I just clicked your Facebook ad.");
                 addBotMessage(welcomeText);
             } catch (e) {
-                console.error(e);
-                addBotMessage("Hi there! Welcome to our Digital Hub. I'm here to help you get started. What is your name?");
+                if (e.message === "API_KEY_MISSING") {
+                    setMessages(prev => [...prev, { 
+                        id: Date.now(), 
+                        text: "Setup Required: Please click the 'Link' icon in the top right and follow the instructions to set your API_KEY.", 
+                        sender: Sender.ERROR, 
+                        timestamp: new Date() 
+                    }]);
+                } else {
+                    addBotMessage("Hi there! Welcome to our Digital Hub. I'm here to help you get started. What is your name?");
+                }
             } finally {
                 setIsTyping(false);
                 setHasStarted(true);
@@ -264,13 +333,25 @@ Our company email is: boatengkwm@yahoo.com
             setMessages(prev => [...prev, userMsg]);
             setInputText('');
             setIsTyping(true);
+            
             try {
                 const response = await sendMessageToGemini(inputText);
                 setIsTyping(false);
                 addBotMessage(response);
             } catch (error) {
                 setIsTyping(false);
-                setMessages(prev => [...prev, { id: Date.now(), text: "Connection error. Please try again.", sender: Sender.BOT, timestamp: new Date() }]);
+                let errorMessage = "Connection error. Please try again.";
+                
+                if (error.message === 'API_KEY_MISSING') {
+                    errorMessage = "System Error: API_KEY is missing. Check the Connect menu.";
+                }
+                
+                setMessages(prev => [...prev, { 
+                    id: Date.now(), 
+                    text: errorMessage, 
+                    sender: error.message === 'API_KEY_MISSING' ? Sender.ERROR : Sender.BOT, 
+                    timestamp: new Date() 
+                }]);
             }
         };
 
