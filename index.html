@@ -59,7 +59,7 @@
     <script type="text/babel" data-type="module">
       import React, { useState, useEffect, useRef } from 'react';
       import ReactDOM from 'react-dom/client';
-      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge, Copy, ClipboardCheck, MessageCircle, ArrowRight } from 'lucide-react';
+      import { Send, MoreVertical, Phone, Video, Paperclip, Smile, Link2, CheckCheck, Mail, X, Server, AlertTriangle, Key, Save, Clock, Info, CreditCard, ExternalLink, Zap, Gauge, Copy, ClipboardCheck, MessageCircle, ArrowRight, ExternalLink as LinkIcon } from 'lucide-react';
       import { GoogleGenAI } from '@google/genai';
 
       // --- TYPES & CONSTANTS ---
@@ -294,8 +294,9 @@ Your goal is to guide a potential client from a Facebook Ad click to a booked ap
 
       // ConnectModal Component
       const ConnectModal = ({ isOpen, onClose }) => {
+        const savedNumber = localStorage.getItem('gemini_business_number');
         const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
-        const [businessNumber, setBusinessNumber] = useState(localStorage.getItem('gemini_business_number') || '');
+        const [businessNumber, setBusinessNumber] = useState(savedNumber || '');
         const storedLitePref = localStorage.getItem('gemini_use_lite');
         const initialLiteState = storedLitePref === 'false' ? false : true; 
         const [useLite, setUseLite] = useState(initialLiteState);
@@ -366,13 +367,21 @@ Your goal is to guide a potential client from a Facebook Ad click to a booked ap
 
                     {/* Step 2: Business WhatsApp Number */}
                     <div className="bg-green-50 p-4 rounded-md border border-green-200">
-                        <strong className="text-green-800 text-sm flex items-center gap-2 mb-2">
-                            <MessageCircle size={16} /> 2. Business WhatsApp Number
-                        </strong>
+                        <div className="flex justify-between items-start mb-2">
+                            <strong className="text-green-800 text-sm flex items-center gap-2">
+                                <MessageCircle size={16} /> 2. Business WhatsApp Number
+                            </strong>
+                            {savedNumber && (
+                                <span className="text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-mono border border-green-300">
+                                    Active: {savedNumber}
+                                </span>
+                            )}
+                        </div>
+                        
                         <p className="text-xs text-green-700 mb-2">
-                            Where should confirmations be sent? (Enter format like 233555XXXXXX)
+                            Where should confirmations be sent? (Format: 233555XXXXXX)
                         </p>
-                        <div className="flex gap-2 mb-3">
+                        <div className="flex gap-2 mb-1">
                             <input 
                                 type="text" 
                                 value={businessNumber}
@@ -381,6 +390,17 @@ Your goal is to guide a potential client from a Facebook Ad click to a booked ap
                                 className="flex-1 px-3 py-2 text-sm border border-green-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
                             />
                         </div>
+                        {/* Test Link */}
+                        {businessNumber && (
+                            <a 
+                                href={`https://wa.me/${businessNumber.replace(/\+/g, '')}`} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-xs text-green-600 underline hover:text-green-800 flex items-center gap-1 inline-flex mt-1"
+                            >
+                                <LinkIcon size={10} /> Test this number (opens WhatsApp)
+                            </a>
+                        )}
                     </div>
 
                     <div className="flex flex-col gap-4">

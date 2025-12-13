@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Server, CheckCheck, Key, Save, CreditCard, Zap, Gauge, MessageCircle } from 'lucide-react';
+import { X, Server, CheckCheck, Key, Save, CreditCard, Zap, Gauge, MessageCircle, ExternalLink } from 'lucide-react';
 
 interface ConnectModalProps {
   isOpen: boolean;
@@ -7,8 +7,9 @@ interface ConnectModalProps {
 }
 
 export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) => {
+  const savedNumber = localStorage.getItem('gemini_business_number');
   const [manualKey, setManualKey] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [businessNumber, setBusinessNumber] = useState(localStorage.getItem('gemini_business_number') || '');
+  const [businessNumber, setBusinessNumber] = useState(savedNumber || '');
   
   const storedLitePref = localStorage.getItem('gemini_use_lite');
   const initialLiteState = storedLitePref === 'false' ? false : true; 
@@ -89,13 +90,21 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
 
              {/* Step 2: Business WhatsApp Number */}
              <div className="bg-green-50 p-4 rounded-md border border-green-200">
-                <strong className="text-green-800 text-sm flex items-center gap-2 mb-2">
-                    <MessageCircle size={16} /> 2. Business WhatsApp Number
-                </strong>
+                <div className="flex justify-between items-start mb-2">
+                    <strong className="text-green-800 text-sm flex items-center gap-2">
+                        <MessageCircle size={16} /> 2. Business WhatsApp Number
+                    </strong>
+                    {savedNumber && (
+                        <span className="text-[10px] bg-green-200 text-green-800 px-2 py-0.5 rounded-full font-mono border border-green-300">
+                            Active: {savedNumber}
+                        </span>
+                    )}
+                </div>
+
                 <p className="text-xs text-green-700 mb-2">
                     Where should appointment confirmations be sent? (Enter format like 233555XXXXXX)
                 </p>
-                <div className="flex gap-2 mb-3">
+                <div className="flex gap-2 mb-1">
                     <input 
                         type="text" 
                         value={businessNumber}
@@ -104,6 +113,18 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({ isOpen, onClose }) =
                         className="flex-1 px-3 py-2 text-sm border border-green-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
                 </div>
+                
+                 {/* Test Link */}
+                 {businessNumber && (
+                    <a 
+                        href={`https://wa.me/${businessNumber.replace(/\+/g, '')}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-xs text-green-600 underline hover:text-green-800 flex items-center gap-1 inline-flex mt-1"
+                    >
+                        <ExternalLink size={10} /> Test this number (opens WhatsApp)
+                    </a>
+                )}
             </div>
 
             {/* Model & Save */}
