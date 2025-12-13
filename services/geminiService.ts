@@ -1,4 +1,4 @@
-import { GoogleGenAI, Chat, GenerationConfig } from "@google/genai";
+import { GoogleGenAI, Chat } from "@google/genai";
 
 // Services list for the prompt
 const SERVICES = [
@@ -51,9 +51,33 @@ let chatSession: Chat | null = null;
 let genAI: GoogleGenAI | null = null;
 let currentModelName = '';
 
+// Helper to safely get the API Key from various sources
+const getApiKey = (): string | null => {
+  // 1. Check LocalStorage
+  if (typeof localStorage !== 'undefined') {
+    const local = localStorage.getItem('gemini_api_key');
+    if (local && local.trim().length > 0) return local;
+  }
+
+  // 2. Check window.process (Injected by server.js)
+  if (typeof window !== 'undefined' && (window as any).process && (window as any).process.env) {
+    const injected = (window as any).process.env.API_KEY;
+    if (injected && injected !== '__GENAI_API_KEY__' && injected.trim().length > 0) {
+      return injected;
+    }
+  }
+
+  // 3. Fallback to standard process.env (Build tools)
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      const standard = process.env.API_KEY;
+      if (standard && standard !== '__GENAI_API_KEY__') return standard;
+  }
+
+  return null;
+};
+
 export const initializeChat = (forceLite = false) => {
-  // Safely check for process.env availability
-  const apiKey = typeof process !== 'undefined' && process.env ? process.env.API_KEY : null;
+  const apiKey = getApiKey();
 
   // LOGIC CHANGE: Default to Lite model unless explicitly set to 'false' in localStorage.
   const storedPref = typeof localStorage !== 'undefined' ? localStorage.getItem('gemini_use_lite') : null;
@@ -66,18 +90,25 @@ export const initializeChat = (forceLite = false) => {
   currentModelName = modelName;
 
   if (!apiKey) {
-    console.warn("API_KEY is missing. Chat will operate in fallback mode or fail.");
+    console.warn("API_KEY is missing. Chat will not be able to connect.");
+    return false;
   } else {
-    genAI = new GoogleGenAI({ apiKey: apiKey });
-    
-    chatSession = genAI.chats.create({
-      model: modelName,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.7,
-      }
-    });
-    console.log(`Chat initialized with model: ${modelName}`);
+    try {
+        genAI = new GoogleGenAI({ apiKey: apiKey });
+        
+        chatSession = genAI.chats.create({
+        model: modelName,
+        config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            temperature: 0.7,
+        }
+        });
+        console.log(`Chat initialized with model: ${modelName}`);
+        return true;
+    } catch (e) {
+        console.error("Failed to initialize GoogleGenAI client", e);
+        return false;
+    }
   }
 };
 
@@ -85,12 +116,16 @@ export const initializeChat = (forceLite = false) => {
 const delayPromise = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const sendMessageToGemini = async (message: string, onStatusUpdate?: (status: string) => void): Promise<string> => {
+  // Try to init if not exists
   if (!chatSession) {
-    initializeChat();
+    const success = initializeChat();
+    if (!success) {
+        throw new Error("API_KEY_MISSING");
+    }
   }
 
   if (!chatSession) {
-     throw new Error("Chat session not initialized (Check API Key)");
+     throw new Error("Chat session not initialized.");
   }
 
   const MAX_RETRIES = 3;
